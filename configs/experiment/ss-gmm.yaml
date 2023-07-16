@@ -1,0 +1,15 @@
+defaults:
+  - model: gmm
+
+# Task-specific configurations
+name: gopt-gmm
+n_reference_samples: 100
+simulation_batch_size: 1
+eval_interval: 5
+checkpoint_interval: 10
+episodes: 100
+obs_scaling: min-max
+
+# Hyper-parameters
+seed: 0
+n_posterior_samples: 1000
