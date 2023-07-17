@@ -3,18 +3,27 @@ import jax.numpy as jnp
 
 from functools import partial
 
+from .utils import default_prng_key
+
 
 @partial(jit, static_argnames='num_probe')
-def get_random_probe_points(origin, points, probe_radius=2., num_probe=5, rand_key=random.PRNGKey(0)):
+def get_random_probe_points(origin: jnp.ndarray, 
+                            points: jnp.ndarray, 
+                            probe_radius: float = 2., 
+                            num_probe: int = 5, 
+                            rand_key=None) -> jnp.ndarray:
     batch, num_points, dim = points.shape
-    alpha = random.uniform(rand_key, shape=(batch, num_points, num_probe, 1), dtype=points.dtype)
+    alpha = random.uniform(default_prng_key(rand_key), shape=(batch, num_points, num_probe, 1), dtype=points.dtype)
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis]  # [batch, num_points, num_probe, dim]
     return probe_points
 
 
 @partial(jit, static_argnames='num_probe')
-def get_probe_points(origin, points, probe_radius=2., num_probe=5):
+def get_probe_points(origin: jnp.ndarray, 
+                     points: jnp.ndarray, 
+                     probe_radius: float = 2., 
+                     num_probe: int = 5) -> jnp.ndarray:
     alpha = jnp.linspace(0, 1, num_probe + 2, dtype=points.dtype)[jnp.newaxis, jnp.newaxis, 1:num_probe + 1, jnp.newaxis]
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis, :]  # [batch, num_points, num_probe, dim]
@@ -22,7 +31,7 @@ def get_probe_points(origin, points, probe_radius=2., num_probe=5):
 
 
 @jit
-def get_shifted_points(new_origins, points):
+def get_shifted_points(new_origins: jnp.ndarray, points: jnp.ndarray):
     '''
     Args:
         new_origins: [no, dim]
@@ -36,7 +45,10 @@ def get_shifted_points(new_origins, points):
 
 
 @partial(jit, static_argnames='num_probe')
-def get_projecting_points(X1, X2, probe_step_size, num_probe=5):
+def get_projecting_points(X1: jnp.ndarray, 
+                          X2: jnp.ndarray, 
+                          probe_step_size: float, 
+                          num_probe: int = 5) -> jnp.ndarray:
     '''
     X1: [nb1 x dim]
     X2: [nb2 x dim] or [nb1 x nb2 x dim]

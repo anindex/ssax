@@ -4,13 +4,16 @@ import jax.numpy as jnp
 
 from itertools import product
 from functools import partial
+from typing import Tuple
 
 from .probe import get_random_probe_points, get_probe_points
 from .rotation import get_random_maximal_torus_matrix
 
 
 @jit
-def get_cube_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax.Array:
+def get_cube_vertices(origin: jax.ndarray, 
+                      radius: float = 1., 
+                      **kwargs) -> jax.ndarray:
     dim = origin.shape[-1]
     points = jnp.array(list(product([1, -1], repeat=dim)), dtype=origin.dtype) / jnp.sqrt(dim)
     points = points * radius + origin
@@ -18,7 +21,9 @@ def get_cube_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax.Ar
 
 
 @jit
-def get_orthoplex_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax.Array:
+def get_orthoplex_vertices(origin: jax.ndarray, 
+                           radius: float = 1., 
+                           **kwargs) -> jax.ndarray:
     dim = origin.shape[-1]
     points = jnp.zeros((2 * dim, dim), dtype=origin.dtype)
     first = jnp.arange(0, dim)
@@ -30,7 +35,7 @@ def get_orthoplex_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> j
 
 
 @jit
-def get_simplex_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax.Array:
+def get_simplex_vertices(origin: jax.ndarray, radius: float = 1., **kwargs) -> jax.ndarray:
     '''
     Simplex coordinates: https://en.wikipedia.org/wiki/Simplex#Cartesian_coordinates_for_a_regular_n-dimensional_simplex_in_Rn
     '''
@@ -42,13 +47,19 @@ def get_simplex_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax
 
 
 @partial(jit, static_argnames=['num_probe', 'random_probe'])
-def get_sampled_polytope_vertices(origin: jax.Array, polytope_vertices: jax.Array, step_radius=1., probe_radius=2., num_probe=5, random_probe=False, **kwargs) -> Union[jax.Array]:
+def get_sampled_polytope_vertices(origin: jax.ndarray, 
+                                  polytope_vertices: jax.ndarray, 
+                                  step_radius: float = 1., 
+                                  probe_radius: float = 2., 
+                                  num_probe: int = 5, 
+                                  random_probe: bool = False, 
+                                  **kwargs) -> Tuple[jax.ndarray]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, ...]
     batch, dim = origin.shape
     polytope_vertices = polytope_vertices[jnp.newaxis, ...].repeat(batch, axis=0)  # [batch, num_vertices, dim]
 
-    max_torus_mat = get_random_maximal_torus_matrix(origin, angle_range=[0, np.pi/2])
+    max_torus_mat = get_random_maximal_torus_matrix(origin, angle_range=[0, jnp.pi/2])
     polytope_vertices = polytope_vertices @ max_torus_mat
     step_points = polytope_vertices * step_radius + origin[:, jnp.newaxis, ...]  # [batch, num_vertices, dim]
     if random_probe:
@@ -59,7 +70,13 @@ def get_sampled_polytope_vertices(origin: jax.Array, polytope_vertices: jax.Arra
 
 
 @partial(jit, static_argnames=['num_probe', 'num_sphere_point', 'random_probe'])
-def get_sampled_points_on_sphere(origin: jax.Array, step_radius=1., probe_radius=2., num_probe=5, num_sphere_point=50, random_probe=False, **kwargs) -> Union[jax.Array]:
+def get_sampled_points_on_sphere(origin: jax.ndarray,
+                                 step_radius: float = 1., 
+                                 probe_radius: float = 2., 
+                                 num_probe: int = 5, 
+                                 random_probe: bool = False,
+                                 num_sphere_point: int = 50,
+                                 **kwargs) -> Tuple[jax.ndarray]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, :]
     batch, dim = origin.shape

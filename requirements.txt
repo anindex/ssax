@@ -14,3 +14,4 @@ tqdm
 setuptools
 jaxopt
 flax
+ott-jax
