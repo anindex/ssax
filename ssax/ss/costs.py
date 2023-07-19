@@ -15,23 +15,23 @@ class GenericCost(geometry.Geometry):
 
     def __init__(
         self,
-        x: jnp.ndarray,
+        X: jnp.ndarray,
         objective_fn: Any,
         **kwargs: Any
         ):
         super().__init__(**kwargs)
-        self._x = x  # polytope vertices [batch, num_vertices, d]
+        self._X = X  # polytope vertices [batch, num_vertices, d]
         self.objective_fn = objective_fn
 
     @property.setter
-    def x(self, new_x: jnp.ndarray):  # noqa: D102
+    def X(self, new_x: jnp.ndarray):  # noqa: D102
         assert new_x.ndim == 3
-        self._x = new_x
+        self._X = new_x
         self._compute_cost_matrix()
 
     @property
-    def x(self) -> jnp.ndarray:  # noqa: D102
-        return self._x
+    def X(self) -> jnp.ndarray:  # noqa: D102
+        return self._X
 
     @property
     def cost_matrix(self) -> Optional[jnp.ndarray]:  # noqa: D102
@@ -48,24 +48,24 @@ class GenericCost(geometry.Geometry):
         # in the process of flattening/unflattening in vmap, `__init__`
         # can be called with dummy objects
         # we optionally access `shape` in order to get the batch size
-        if self._x is None:
+        if self._X is None:
             return 0
-        return self._x.shape
+        return self._X.shape
 
     @property
     def is_symmetric(self) -> bool:  # noqa: D102
-        return self._x.shape[0] == self._x.shape[1]
+        return self._X.shape[0] == self._X.shape[1]
 
     def _compute_cost_matrix(self) -> jnp.ndarray:
-        self._cost_matrix = self.objective_fn(self._x)
+        self._cost_matrix = self.objective_fn(self._X)
 
     def barycenter(self, weights: jnp.ndarray) -> jnp.ndarray:
-        """Compute barycenter of points in self._x using weights."""
-        return jnp.average(self._x, weights=weights, axis=1)  # [batch, d]
+        """Compute barycenter of points in self._X using weights."""
+        return jnp.average(self._X, weights=weights, axis=1)  # [batch, d]
 
     def tree_flatten(self):  # noqa: D102
         return (
-            self._x,
+            self._X,
             self._src_mask,
             self._tgt_mask,
             self._epsilon_init,
@@ -76,9 +76,9 @@ class GenericCost(geometry.Geometry):
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):  # noqa: D102
-        x, src_mask, tgt_mask, epsilon, objective_fn = children
+        X, src_mask, tgt_mask, epsilon, objective_fn = children
         return cls(
-            x,
+            X,
             objective_fn=objective_fn,
             src_mask=src_mask,
             tgt_mask=tgt_mask,
