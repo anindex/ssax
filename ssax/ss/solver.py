@@ -6,11 +6,12 @@ import jax.numpy as jnp
 
 from ott.solvers.linear import continuous_barycenter, sinkhorn, sinkhorn_lr
 from ott.problems.linear import barycenter_problem, linear_problem
+from ott.geometry.epsilon_scheduler import Epsilon
 
 from ssax.ss.costs import GenericCost
 from ssax.ss.utils import default_prng_key
-from ssax.ss.polytopes import POLYTOPE_MAP, SAMPLE_POLYTOPE_MA
 from ssax.objectives.base import ObjectiveFn
+from ssax.ss.polytopes import POLYTOPE_MAP, SAMPLE_POLYTOPE_MAP
 
 
 __all__ = ["SinkhornStep"]
@@ -53,7 +54,12 @@ class SinkhornStep:
         self,
         objective_fn: ObjectiveFn,
         polytope_type: str = "orthoplex",
-        epsilon: Optional[float] = None,
+        epsilon: Optional[Union[Epsilon, float]] = None,
+        step_radius: float = 1.,
+        probe_radius: float = 2.,
+        random_probe: bool = False,
+        num_sphere_point: int = 50,
+        num_probe: int = 5,
         rank: int = -1,
         linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn",
                                         "sinkhorn_lr.LRSinkhorn"]] = None,
@@ -68,10 +74,21 @@ class SinkhornStep:
 
         self.objective_fn = objective_fn
         self.cost = None  # type: GenericCost
+
+        # Sinkhorn Step params
         self.polytope_type = polytope_type
+        if self.polytope_type in POLYTOPE_MAP:
+            self.direction_set = 'polytope'
+        else:
+            self.direction_set = 'random'
         self.polytope_vertices = None
-        self.rng = default_prng_key(rng)
         self.epsilon = epsilon if epsilon is not None else default_epsilon
+        self.step_radius = step_radius
+        self.probe_radius = probe_radius
+        self.random_probe = random_probe
+        self.num_sphere_point = num_sphere_point
+        self.num_probe = num_probe
+
         self.rank = rank
         self.linear_ot_solver = linear_ot_solver
         if self.linear_ot_solver is None:
@@ -93,6 +110,7 @@ class SinkhornStep:
         self.max_iterations = max_iterations
         self.threshold = threshold
         self.store_inner_errors = store_inner_errors
+        self.rng = default_prng_key(rng)
         self._kwargs = kwargs
 
     @property
@@ -148,22 +166,41 @@ class SinkhornStep:
     def _step(self, state: State, iteration: int) -> State:
         """Run one iteration of the Sinkhorn algorithm."""
         X = state.X
-        self.cost.X = X
+
+        eps = self.epsilon.at(iteration) if isinstance(self.epsilon, Epsilon) else self.epsilon
+        step_radius = self.step_radius * eps
+        probe_radius = self.probe_radius * eps
+        
+        # compute sampled polytope vertices
+        X_vertices, X_probe, vertices = SAMPLE_POLYTOPE_MAP[self.direction_set](X,
+                                                                                polytope_vertices=self.polytope_vertices,
+                                                                                step_radius=step_radius,
+                                                                                probe_radius=probe_radius,
+                                                                                num_probe=self.num_probe,
+                                                                                random_probe=self.random_probe,
+                                                                                num_sphere_point=self.num_sphere_point,
+                                                                                rng=self.rng)
+
+        # solve Sinkhorn
+        self.cost.X = X_probe
         res = self.linear_ot_solver(
             linear_problem.LinearProblem(
                 self.cost, self.a, self.b
             )
         )
 
-        cost = jnp.sum(res.reg_ot_costs)
-        updated_costs = self.costs.at[iteration].set(cost)
-        converged = jnp.all(convergeds)
-        linear_convergence = self.linear_convergence.at[iteration].set(converged)
+        # barycentric projection
+        X_new = jnp.einsum('bik,bi->bk', X_vertices, res.matrix / self.a[..., jnp.newaxis])
 
-        if store_errors and self.errors is not None:
-        errors = self.errors.at[iteration, :, :].set(errors)
-        else:
-        errors = None
+        # cost = jnp.sum(res.reg_ot_costs)
+        # updated_costs = self.costs.at[iteration].set(cost)
+        # converged = jnp.all(convergeds)
+        # linear_convergence = self.linear_convergence.at[iteration].set(converged)
+
+        # if store_errors and self.errors is not None:
+        # errors = self.errors.at[iteration, :, :].set(errors)
+        # else:
+        # errors = None
 
 
     

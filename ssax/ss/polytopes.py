@@ -8,6 +8,7 @@ from typing import Tuple
 
 from .probe import get_random_probe_points, get_probe_points
 from .rotation import get_random_maximal_torus_matrix
+from .utils import default_prng_key
 
 
 @jit
@@ -52,18 +53,19 @@ def get_sampled_polytope_vertices(origin: jax.ndarray,
                                   step_radius: float = 1., 
                                   probe_radius: float = 2., 
                                   num_probe: int = 5, 
-                                  random_probe: bool = False, 
+                                  random_probe: bool = False,
+                                  rng: jax.random.PRNGKey = None,
                                   **kwargs) -> Tuple[jax.ndarray]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, ...]
     batch, dim = origin.shape
     polytope_vertices = polytope_vertices[jnp.newaxis, ...].repeat(batch, axis=0)  # [batch, num_vertices, dim]
 
-    max_torus_mat = get_random_maximal_torus_matrix(origin, angle_range=[0, jnp.pi/2])
+    max_torus_mat = get_random_maximal_torus_matrix(origin, rng=rng)
     polytope_vertices = polytope_vertices @ max_torus_mat
     step_points = polytope_vertices * step_radius + origin[:, jnp.newaxis, ...]  # [batch, num_vertices, dim]
     if random_probe:
-        probe_points = get_random_probe_points(origin, polytope_vertices, probe_radius, num_probe)
+        probe_points = get_random_probe_points(origin, polytope_vertices, probe_radius, num_probe, rng=rng)
     else:
         probe_points = get_probe_points(origin, polytope_vertices, probe_radius, num_probe)  # [batch, num_vertices, num_probe, dim]
     return step_points, probe_points, polytope_vertices
@@ -76,17 +78,18 @@ def get_sampled_points_on_sphere(origin: jax.ndarray,
                                  num_probe: int = 5, 
                                  random_probe: bool = False,
                                  num_sphere_point: int = 50,
+                                 rng: jax.random.PRNGKey = None,
                                  **kwargs) -> Tuple[jax.ndarray]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, :]
     batch, dim = origin.shape
     # marsaglia method
-    rand_key = kwargs.get('rand_key', random.PRNGKey(0))
-    points = random.normal(rand_key, shape=(batch, num_sphere_point, dim), dtype=origin.dtype)  # [batch, num_points, dim]
+    rng = default_prng_key(rng)
+    points = random.normal(rng, shape=(batch, num_sphere_point, dim), dtype=origin.dtype)  # [batch, num_points, dim]
     points = points / jnp.linalg.norm(points, axis=-1, keepdims=True)
     step_points = points * step_radius + origin[:, jnp.newaxis, :] # [batch, num_points, dim]
     if random_probe:
-        probe_points = get_random_probe_points(origin, points, probe_radius, num_probe)
+        probe_points = get_random_probe_points(origin, points, probe_radius, num_probe, rng=rng)
     else:
         probe_points = get_probe_points(origin, points, probe_radius, num_probe)  # [batch, 2 * dim, num_probe, dim]
     return step_points, probe_points, points

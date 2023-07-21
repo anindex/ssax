@@ -11,9 +11,9 @@ def get_random_probe_points(origin: jnp.ndarray,
                             points: jnp.ndarray, 
                             probe_radius: float = 2., 
                             num_probe: int = 5, 
-                            rand_key=None) -> jnp.ndarray:
+                            rng=None) -> jnp.ndarray:
     batch, num_points, dim = points.shape
-    alpha = random.uniform(default_prng_key(rand_key), shape=(batch, num_points, num_probe, 1), dtype=points.dtype)
+    alpha = random.uniform(default_prng_key(rng), shape=(batch, num_points, num_probe, 1), dtype=points.dtype)
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis]  # [batch, num_points, num_probe, dim]
     return probe_points

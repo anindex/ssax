@@ -19,13 +19,13 @@ def rotation_matrix(theta: jnp.ndarray) -> jnp.ndarray:
 
 @jit
 def get_random_maximal_torus_matrix(origin: jnp.ndarray, 
-                                    angle_range=[0, jnp.pi/2],
-                                    rand_key: Any = None,
+                                    angle_range=[0, 2 * jnp.pi],
+                                    rng: Any = None,
                                     **kwargs) -> jnp.ndarray:
     batch, dim = origin.shape
     assert dim % 2 == 0, 'Only work with even dim for random rotation for now.'
 
-    theta = random.uniform(default_prng_key(rand_key), shape=(batch, dim // 2), minval=angle_range[0], maxval=angle_range[1], dtype=origin.dtype)
+    theta = random.uniform(default_prng_key(rng), shape=(batch, dim // 2), minval=angle_range[0], maxval=angle_range[1], dtype=origin.dtype)
     rot_mat = vmap(rotation_matrix)(theta)
     # make batch block diag
     max_torus_mat = vmap(lambda mats: jsp.linalg.block_diag(*mats))(rot_mat)

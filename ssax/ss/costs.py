@@ -24,7 +24,7 @@ class GenericCost(geometry.Geometry):
 
     @property.setter
     def X(self, new_x: jnp.ndarray):  # noqa: D102
-        assert new_x.ndim == 3  # polytope vertices [batch, num_vertices, d]
+        assert new_x.ndim == 4  # polytope vertices [batch, num_vertices, num_probe, d]
         self._X = new_x
         self._compute_cost_matrix()
 
@@ -56,11 +56,8 @@ class GenericCost(geometry.Geometry):
         return self._X.shape[0] == self._X.shape[1]
 
     def _compute_cost_matrix(self) -> jnp.ndarray:
-        self._cost_matrix = self.objective_fn(self._X)
-
-    def barycenter(self, weights: jnp.ndarray) -> jnp.ndarray:
-        """Compute barycenter of points in self._X using weights."""
-        return jnp.average(self._X, weights=weights, axis=1)  # [batch, d]
+        costs = self.objective_fn(self._X)
+        self._cost_matrix = costs.mean(axis=-1)  # [batch, num_vertices]
 
     def tree_flatten(self):  # noqa: D102
         return (
