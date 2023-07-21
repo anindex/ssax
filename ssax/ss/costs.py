@@ -15,17 +15,16 @@ class GenericCost(geometry.Geometry):
 
     def __init__(
         self,
-        X: jnp.ndarray,
         objective_fn: Any,
         **kwargs: Any
         ):
         super().__init__(**kwargs)
-        self._X = X  # polytope vertices [batch, num_vertices, d]
         self.objective_fn = objective_fn
+        self._X = None
 
     @property.setter
     def X(self, new_x: jnp.ndarray):  # noqa: D102
-        assert new_x.ndim == 3
+        assert new_x.ndim == 3  # polytope vertices [batch, num_vertices, d]
         self._X = new_x
         self._compute_cost_matrix()
 

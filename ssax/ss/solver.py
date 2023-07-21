@@ -1,14 +1,48 @@
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple, Union, NamedTuple
 
 import jax
+from jax import jit
 import jax.numpy as jnp
 
 from ott.solvers.linear import continuous_barycenter, sinkhorn, sinkhorn_lr
+from ott.problems.linear import barycenter_problem, linear_problem
+
+from ssax.ss.costs import GenericCost
+from ssax.ss.utils import default_prng_key
+from ssax.ss.polytopes import POLYTOPE_MAP, SAMPLE_POLYTOPE_MA
+from ssax.objectives.base import ObjectiveFn
+
 
 __all__ = ["SinkhornStep"]
 
 State = Union["sinkhorn.SinkhornState", "sinkhorn_lr.LRSinkhornState",
               "continuous_barycenter.FreeBarycenterState"]
+
+
+class SinkhornStepState(NamedTuple):
+    """Holds the state of the Wasserstein barycenter solver.
+
+    Args:
+        costs: Holds the sequence of regularized GW costs seen through the outer
+        loop of the solver.
+        linear_convergence: Holds the sequence of bool convergence flags of the
+        inner Sinkhorn iterations.
+        errors: Holds sequence of vectors of errors of the Sinkhorn algorithm
+        at each iteration.
+        X: optimizing points.
+        a: weights of the barycenter. (not using)
+    """
+
+    costs: Optional[jnp.ndarray] = None
+    linear_convergence: Optional[jnp.ndarray] = None
+    errors: Optional[jnp.ndarray] = None
+    X: Optional[jnp.ndarray] = None
+    a: Optional[jnp.ndarray] = None
+
+    def set(self, **kwargs: Any) -> "SinkhornStepState":
+        """Return a copy of self, possibly with overwrites."""
+        return self._replace(**kwargs)
+
 
 
 @jax.tree_util.register_pytree_node_class
@@ -17,6 +51,8 @@ class SinkhornStep:
 
     def __init__(
         self,
+        objective_fn: ObjectiveFn,
+        polytope_type: str = "orthoplex",
         epsilon: Optional[float] = None,
         rank: int = -1,
         linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn",
@@ -25,10 +61,16 @@ class SinkhornStep:
         max_iterations: int = 50,
         threshold: float = 1e-3,
         store_inner_errors: bool = False,
+        rng: Optional[jax.random.PRNGKeyArray] = None,
         **kwargs: Any,
     ):
         default_epsilon = 1.0
 
+        self.objective_fn = objective_fn
+        self.cost = None  # type: GenericCost
+        self.polytope_type = polytope_type
+        self.polytope_vertices = None
+        self.rng = default_prng_key(rng)
         self.epsilon = epsilon if epsilon is not None else default_epsilon
         self.rank = rank
         self.linear_ot_solver = linear_ot_solver
@@ -44,7 +86,7 @@ class SinkhornStep:
                     self.linear_ot_solver = sinkhorn_lr.LRSinkhorn(
                         rank=self.rank, epsilon=self.epsilon, **kwargs
                     )
-        else:
+        else:  # NOTE: current implementation does not support low-rank solvers
             self.linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
 
         self.min_iterations = min_iterations
@@ -57,6 +99,93 @@ class SinkhornStep:
     def is_low_rank(self) -> bool:
         """Whether the solver is low-rank."""
         return self.rank > 0
+    
+    def init_state(
+        self,
+        X_init: Optional[jnp.ndarray] = None,
+    ) -> SinkhornStepState:
+        """Initialize the state of the Wasserstein barycenter iterations.
+
+        Args:
+        bar_prob: The barycenter problem.
+        bar_size: Size of the barycenter.
+        X_init: Initial barycenter estimate of shape ``[bar_size, ndim]``.
+            If `None`, ``bar_size`` points will be sampled from the input
+            measures according to their weights
+            :attr:`~ott.problems.linear.barycenter_problem.FreeBarycenterProblem.flattened_y`.
+        rng: Random key for seeding.
+
+        Returns:
+        The initial barycenter state.
+        """
+        num_points, dim = X_init.shape
+        a = jnp.ones((num_points,)) / num_points
+        num_iter = self.max_iterations
+        if self.store_inner_errors:
+            errors = -jnp.ones((
+                self.linear_ot_solver.outer_iterations,
+                num_iter,
+            ))
+        else:
+            errors = None
+
+        # init polytope vertices
+        self.polytope_vertices = POLYTOPE_MAP[self.polytope_type](jnp.zeros((dim,)))
+
+        # init cost
+        self.cost = GenericCost(self.objective_fn)
+
+        # init uniform weights
+        # TODO: support non-uniform weights for conditional sinkhorn step
+        self.a = a
+        self.b = jnp.ones((self.polytope_vertices.shape[0],)) / self.polytope_vertices.shape[0]
+
+        return SinkhornStepState(
+            -jnp.ones((num_iter,)), -jnp.ones((num_iter,)), errors, X_init, a
+        )
+    
+    @jit
+    def _step(self, state: State, iteration: int) -> State:
+        """Run one iteration of the Sinkhorn algorithm."""
+        X = state.X
+        self.cost.X = X
+        res = self.linear_ot_solver(
+            linear_problem.LinearProblem(
+                self.cost, self.a, self.b
+            )
+        )
+
+        cost = jnp.sum(res.reg_ot_costs)
+        updated_costs = self.costs.at[iteration].set(cost)
+        converged = jnp.all(convergeds)
+        linear_convergence = self.linear_convergence.at[iteration].set(converged)
+
+        if store_errors and self.errors is not None:
+        errors = self.errors.at[iteration, :, :].set(errors)
+        else:
+        errors = None
+
+
+    
+    def iterations(self, X_init: jnp.ndarray) -> State:
+        """Run the Sinkhorn iterations.
+
+        Args:
+        X_init: Initial barycenter estimate of shape ``[bar_size, ndim]``.
+            If `None`, ``bar_size`` points will be sampled from the input
+            measures according to their weights
+            :attr:`~ott.problems.linear.barycenter_problem.FreeBarycenterProblem.flattened_y`.
+
+        Returns:
+        The final barycenter state.
+        """
+        state = self.init_state(X_init)
+        iteration = 0
+        while self._continue(state, iteration):
+            state = self._step(state, iteration)
+            iteration += 1
+        return state
+        
 
     def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:
         return ([self.epsilon, self.linear_ot_solver, self.threshold], {

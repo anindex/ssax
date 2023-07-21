@@ -29,10 +29,10 @@ class ObjectiveFn(abc.ABC):
         self.noise_std = noise_std
         self.negate = negate
         self._bounds = bounds
-        if self._bounds is not None and len(self._bounds) != self.dim:
+        if self._bounds is not None and self._bounds.shape[0] != self.dim:
             raise ValueError(
                 "Expected the bounds to match the dimensionality of the domain. "
-                f"Got {self.dim=} and {len(self._bounds)=}."
+                f"Got {self.dim=} and {self._bounds.shape=}."
             )
 
     @property
@@ -51,7 +51,7 @@ class ObjectiveFn(abc.ABC):
           The cost array.
         """
 
-    def __call__(self, X: jnp.ndarray, y: jnp.ndarray) -> float:
+    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
         cost = self.evaluate(X)
         return cost
 

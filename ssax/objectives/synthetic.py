@@ -39,7 +39,7 @@ class Ackley(ObjectiveFn):
         """
         self.dim = dim
         if bounds is None:
-            bounds = jnp.array([(-32.768, 32.768) * self.dim])
+            bounds = jnp.array([(-32.768, 32.768) for _ in range(dim)])
         self._optimizers = jnp.zeros(self.dim)
         super().__init__(noise_std=noise_std, negate=negate, bounds=bounds)
         self.a = 20
@@ -54,13 +54,20 @@ class Ackley(ObjectiveFn):
         return part1 + part2 + a + jnp.e
 
 
-
+@jax.tree_util.register_pytree_node_class
 class Beale(ObjectiveFn):
 
     dim = 2
     _optimal_value = 0.0
     _bounds = jnp.array([(-4.5, 4.5), (-4.5, 4.5)])
     _optimizers = jnp.array([(3.0, 0.5)])
+
+    def __init__(self, 
+                 noise_std: float | None = None, 
+                 negate: bool = False, 
+                 bounds: List[Tuple[float, float]] | None = None, 
+                 **kwargs: Any):
+        super().__init__(noise_std, negate, bounds, **kwargs)
 
     @jit
     def evaluate(self, X: jnp.ndarray) -> jnp.ndarray:
