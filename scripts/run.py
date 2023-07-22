@@ -263,12 +263,12 @@ def main(cfg: DictConfig):
 def run_mcmc(
     rng_key,
     model: Callable,
-    reference_data: Union[np.ndarray, jnp.ndarray],
+    reference_data: Union[np.array, jnp.array],
     n_train_data: int,
     n_eval_data: int,
     n_warmup: int = 1000,
     n_chains: int = 1,
-) -> jnp.ndarray:
+) -> jnp.array:
 
     n_proposal_samples_per_chain = math.ceil((n_train_data + n_eval_data) / n_chains)
     kernel = NUTS(model, dense_mass=False, init_strategy=init_to_median(num_samples=10_000), target_accept_prob=0.7)
@@ -316,7 +316,7 @@ def run_density_estimation(
     train_dataloader = build_dataloader(train_dataset, batch_size=batch_size)
     eval_dataloader = build_dataloader(eval_dataset, batch_size=batch_size)
 
-    def training_step(state: TrainState, data: jnp.ndarray):
+    def training_step(state: TrainState, data: jnp.array):
         def loss_fn(model_params: hk.Params, batch):
             loss = -jnp.mean(state.apply_fn(model_params, batch))
             return loss
@@ -326,7 +326,7 @@ def run_density_estimation(
 
         return state, None
 
-    def eval_fn(state: TrainState, data: jnp.ndarray):
+    def eval_fn(state: TrainState, data: jnp.array):
         loss = -jnp.mean(state.apply_fn(state.params, data))
         return state, loss
 

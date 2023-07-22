@@ -4,6 +4,8 @@ from typing import Any, Callable, Literal, Optional, Tuple, Union
 import jax
 import jax.numpy as jnp
 
+from ssax.ss.polytopes import POLYTOPE_NUM_VERTICES_MAP
+
 from ott.geometry import geometry
 
 __all__ = ["GenericCost"]
@@ -16,69 +18,65 @@ class GenericCost(geometry.Geometry):
     def __init__(
         self,
         objective_fn: Any,
+        X: jnp.array,
         **kwargs: Any
         ):
         super().__init__(**kwargs)
+
         self.objective_fn = objective_fn
-        self._X = None
-
-    @property.setter
-    def X(self, new_x: jnp.ndarray):  # noqa: D102
-        assert new_x.ndim == 4  # polytope vertices [batch, num_vertices, num_probe, d]
-        self._X = new_x
-        self._compute_cost_matrix()
+        
+        assert X.ndim == 4  # polytope vertices [batch, num_vertices, num_probe, d]
+        self.X = X
 
     @property
-    def X(self) -> jnp.ndarray:  # noqa: D102
-        return self._X
-
-    @property
-    def cost_matrix(self) -> Optional[jnp.ndarray]:  # noqa: D102
+    def cost_matrix(self) -> Optional[jnp.array]:  
         if self._cost_matrix is None:
             self._compute_cost_matrix()
         return self._cost_matrix * self.inv_scale_cost
 
     @property
-    def kernel_matrix(self) -> Optional[jnp.ndarray]:  # noqa: D102
+    def kernel_matrix(self) -> Optional[jnp.array]:  
         return jnp.exp(-self.cost_matrix / self.epsilon)
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> Tuple[int, int]:
         # in the process of flattening/unflattening in vmap, `__init__`
         # can be called with dummy objects
         # we optionally access `shape` in order to get the batch size
-        if self._X is None:
-            return 0
-        return self._X.shape
+        return self.X.shape[:2]
 
     @property
-    def is_symmetric(self) -> bool:  # noqa: D102
-        return self._X.shape[0] == self._X.shape[1]
+    def is_symmetric(self) -> bool:  
+        return self.X.shape[0] == self.X.shape[1]
 
-    def _compute_cost_matrix(self) -> jnp.ndarray:
-        costs = self.objective_fn(self._X)
+    def _compute_cost_matrix(self) -> jnp.array:
+        costs = self.objective_fn(self.X)
         self._cost_matrix = costs.mean(axis=-1)  # [batch, num_vertices]
 
-    def tree_flatten(self):  # noqa: D102
+    def evaluate(self, X: jnp.array) -> jnp.array:
+        """Evaluate cost function at given points."""
+        return self.objective_fn(X)
+
+    def tree_flatten(self):  
         return (
-            self._X,
+            self.objective_fn,
+            self.X,
             self._src_mask,
             self._tgt_mask,
             self._epsilon_init,
-            self.objective_fn,
         ), {
-            "scale_cost": self._scale_cost
+            "scale_cost": self._scale_cost,
+            "relative_epsilon": self._relative_epsilon
         }
 
     @classmethod
-    def tree_unflatten(cls, aux_data, children):  # noqa: D102
-        X, src_mask, tgt_mask, epsilon, objective_fn = children
+    def tree_unflatten(cls, aux_data, children):  
+        objective_fn, X, src_mask, tgt_mask, epsilon = children
         return cls(
-            X,
             objective_fn=objective_fn,
+            X=X,
             src_mask=src_mask,
             tgt_mask=tgt_mask,
             epsilon=epsilon,
             **aux_data
         )
-

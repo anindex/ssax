@@ -9,7 +9,7 @@ from .utils import default_prng_key
 
 
 @jit
-def rotation_matrix(theta: jnp.ndarray) -> jnp.ndarray:
+def rotation_matrix(theta: jnp.array) -> jnp.array:
     theta = theta[..., jnp.newaxis, jnp.newaxis]
     dim1 = jnp.concatenate([jnp.cos(theta), -jnp.sin(theta)], axis=-2)
     dim2 = jnp.concatenate([jnp.sin(theta), jnp.cos(theta)], axis=-2)
@@ -18,10 +18,10 @@ def rotation_matrix(theta: jnp.ndarray) -> jnp.ndarray:
 
 
 @jit
-def get_random_maximal_torus_matrix(origin: jnp.ndarray, 
+def get_random_maximal_torus_matrix(origin: jnp.array, 
                                     angle_range=[0, 2 * jnp.pi],
                                     rng: Any = None,
-                                    **kwargs) -> jnp.ndarray:
+                                    **kwargs) -> jnp.array:
     batch, dim = origin.shape
     assert dim % 2 == 0, 'Only work with even dim for random rotation for now.'
 

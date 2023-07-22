@@ -12,8 +12,8 @@ class ObjectiveFn(abc.ABC):
 
     dim: int
     _optimal_value: float
-    _optimizers: Optional[jnp.ndarray] = None
-    _bounds: jnp.ndarray
+    _optimizers: Optional[jnp.array] = None
+    _bounds: jnp.array
 
     def __init__(self,
                  noise_std: Optional[float] = None,
@@ -41,24 +41,27 @@ class ObjectiveFn(abc.ABC):
         return -self._optimal_value if self.negate else self._optimal_value
 
     @abc.abstractmethod
-    def evaluate(self, X: jnp.ndarray) -> jnp.ndarray:
+    def evaluate(self, X: jnp.array) -> jnp.array:
         """Compute cost
 
         Args:
-          X: Array.
+          X: array.
 
         Returns:
           The cost array.
         """
 
-    def __call__(self, X: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, X: jnp.array) -> jnp.array:
         cost = self.evaluate(X)
         return cost
 
-    def tree_flatten(self):  # noqa: D102
-        return (), None
+    def tree_flatten(self):  
+        return (), {
+            "noise_std": self.noise_std,
+            "negate": self.negate,
+            "bounds": self._bounds,
+        }
 
     @classmethod
-    def tree_unflatten(cls, aux_data, children):  # noqa: D102
-        del aux_data
-        return cls(*children)
+    def tree_unflatten(cls, aux_data, children):  
+        return cls(*children, **aux_data)

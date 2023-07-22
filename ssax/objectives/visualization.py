@@ -12,4 +12,4 @@ def plot_objective(objective_fn, ax=None):
     X, Y = np.meshgrid(x, y)
     Z = objective_fn(np.stack([X, Y], axis=-1))
     plt.contourf(X, Y, Z, 100)
-    plt.colorbar()
+    # plt.colorbar()

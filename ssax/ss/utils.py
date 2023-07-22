@@ -21,9 +21,9 @@ def register_pytree_node(cls: type) -> type:
 
 def is_jax_array(obj: Any) -> bool:
   """Check if an object is a Jax array."""
-  if hasattr(jax, "Array"):
-    return isinstance(obj, jax.Array)
-  return isinstance(obj, jnp.DeviceArray)
+  if hasattr(jax, "array"):
+    return isinstance(obj, jnp.array)
+  return isinstance(obj, jnp.Devicearray)
 
 
 def default_prng_key(
@@ -34,7 +34,7 @@ def default_prng_key(
 
 
 def default_progress_fn(
-    status: Tuple[np.ndarray, np.ndarray, np.ndarray, NamedTuple], *args: Any
+    status: Tuple[np.array, np.array, np.array, NamedTuple], *args: Any
 ) -> None:
     """Default progress function."""
     iteration, inner_iterations, total_iter, state = status

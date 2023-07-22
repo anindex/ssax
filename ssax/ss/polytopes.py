@@ -12,9 +12,9 @@ from .utils import default_prng_key
 
 
 @jit
-def get_cube_vertices(origin: jax.ndarray, 
+def get_cube_vertices(origin: jnp.array, 
                       radius: float = 1., 
-                      **kwargs) -> jax.ndarray:
+                      **kwargs) -> jnp.array:
     dim = origin.shape[-1]
     points = jnp.array(list(product([1, -1], repeat=dim)), dtype=origin.dtype) / jnp.sqrt(dim)
     points = points * radius + origin
@@ -22,9 +22,9 @@ def get_cube_vertices(origin: jax.ndarray,
 
 
 @jit
-def get_orthoplex_vertices(origin: jax.ndarray, 
+def get_orthoplex_vertices(origin: jnp.array, 
                            radius: float = 1., 
-                           **kwargs) -> jax.ndarray:
+                           **kwargs) -> jnp.array:
     dim = origin.shape[-1]
     points = jnp.zeros((2 * dim, dim), dtype=origin.dtype)
     first = jnp.arange(0, dim)
@@ -36,7 +36,7 @@ def get_orthoplex_vertices(origin: jax.ndarray,
 
 
 @jit
-def get_simplex_vertices(origin: jax.ndarray, radius: float = 1., **kwargs) -> jax.ndarray:
+def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp.array:
     '''
     Simplex coordinates: https://en.wikipedia.org/wiki/Simplex#Cartesian_coordinates_for_a_regular_n-dimensional_simplex_in_Rn
     '''
@@ -48,14 +48,14 @@ def get_simplex_vertices(origin: jax.ndarray, radius: float = 1., **kwargs) -> j
 
 
 @partial(jit, static_argnames=['num_probe', 'random_probe'])
-def get_sampled_polytope_vertices(origin: jax.ndarray, 
-                                  polytope_vertices: jax.ndarray, 
+def get_sampled_polytope_vertices(origin: jnp.array, 
+                                  polytope_vertices: jnp.array, 
                                   step_radius: float = 1., 
                                   probe_radius: float = 2., 
                                   num_probe: int = 5, 
                                   random_probe: bool = False,
                                   rng: jax.random.PRNGKey = None,
-                                  **kwargs) -> Tuple[jax.ndarray]:
+                                  **kwargs) -> Tuple[jnp.array]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, ...]
     batch, dim = origin.shape
@@ -72,14 +72,14 @@ def get_sampled_polytope_vertices(origin: jax.ndarray,
 
 
 @partial(jit, static_argnames=['num_probe', 'num_sphere_point', 'random_probe'])
-def get_sampled_points_on_sphere(origin: jax.ndarray,
+def get_sampled_points_on_sphere(origin: jnp.array,
                                  step_radius: float = 1., 
                                  probe_radius: float = 2., 
                                  num_probe: int = 5, 
                                  random_probe: bool = False,
                                  num_sphere_point: int = 50,
                                  rng: jax.random.PRNGKey = None,
-                                 **kwargs) -> Tuple[jax.ndarray]:
+                                 **kwargs) -> Tuple[jnp.array]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, :]
     batch, dim = origin.shape
@@ -101,6 +101,11 @@ POLYTOPE_MAP = {
     'simplex': get_simplex_vertices,
 }
 
+POLYTOPE_NUM_VERTICES_MAP = {
+    'cube': lambda dim: 2 ** dim,
+    'orthoplex': lambda dim: 2 * dim,
+    'simplex': lambda dim: dim + 1,
+}
 
 SAMPLE_POLYTOPE_MAP = {
     'polytope': get_sampled_polytope_vertices,

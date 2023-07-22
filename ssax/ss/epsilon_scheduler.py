@@ -18,6 +18,6 @@ class LinearEpsilon(Epsilon):
     def at(self, iteration: Optional[int] = 1) -> float:
         if iteration is None:
             return self.target
-        
-        eps = jnp.minimum(self._init - (self._decay * iteration), self.target)
+
+        eps = jnp.maximum(self._init - (self._decay * iteration), self.target)
         return eps

@@ -47,19 +47,29 @@ class Ackley(ObjectiveFn):
         self.c = 2 * jnp.pi
 
     @jit
-    def evaluate(self, X: jnp.ndarray) -> jnp.ndarray:
+    def evaluate(self, X: jnp.array) -> jnp.array:
         a, b, c = self.a, self.b, self.c
         part1 = -a * jnp.exp(-b / jnp.sqrt(self.dim) * jnp.linalg.norm(X, axis=-1))
         part2 = -(jnp.exp(jnp.mean(jnp.cos(c * X), axis=-1)))
         return part1 + part2 + a + jnp.e
+    
+    def tree_flatten(self):  
+        return (), {
+            "dim": self.dim,
+            "noise_std": self.noise_std,
+            "negate": self.negate,
+            "bounds": self._bounds,
+        }
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):  
+        return cls(*children, **aux_data)
 
 
 @jax.tree_util.register_pytree_node_class
 class Beale(ObjectiveFn):
 
-    dim = 2
     _optimal_value = 0.0
-    _bounds = jnp.array([(-4.5, 4.5), (-4.5, 4.5)])
     _optimizers = jnp.array([(3.0, 0.5)])
 
     def __init__(self, 
@@ -67,10 +77,11 @@ class Beale(ObjectiveFn):
                  negate: bool = False, 
                  bounds: List[Tuple[float, float]] | None = None, 
                  **kwargs: Any):
+        self.dim = 2
         super().__init__(noise_std, negate, bounds, **kwargs)
 
     @jit
-    def evaluate(self, X: jnp.ndarray) -> jnp.ndarray:
+    def evaluate(self, X: jnp.array) -> jnp.array:
         x1, x2 = X[..., 0], X[..., 1]
         part1 = (1.5 - x1 + x1 * x2) ** 2
         part2 = (2.25 - x1 + x1 * x2**2) ** 2
