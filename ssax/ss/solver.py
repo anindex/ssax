@@ -37,6 +37,7 @@ class SinkhornStepState(NamedTuple):
     objective_vals: Optional[jnp.array] = None
     displacement_sqnorms: Optional[jnp.array] = None
     X: Optional[jnp.array] = None
+    X_history: Optional[jnp.array] = None
     a: Optional[jnp.array] = None
 
     def set(self, **kwargs: Any) -> "SinkhornStepState":
@@ -67,6 +68,7 @@ class SinkhornStep:
         rank: int = -1,
         store_inner_errors: bool = False,
         store_outer_evals: bool = False,
+        store_history: bool = False,
         rng: Optional[jax.random.PRNGKeyArray] = None,
         **kwargs: Any,
     ):
@@ -111,6 +113,7 @@ class SinkhornStep:
         self.threshold = threshold
         self.store_inner_errors = store_inner_errors
         self.store_outer_evals = store_outer_evals
+        self.store_history = store_history
         self.rng = default_prng_key(rng)
         self._kwargs = kwargs
 
@@ -158,13 +161,18 @@ class SinkhornStep:
             objective_vals = -jnp.ones((num_iter, num_points))
         else:
             objective_vals = None
+        
+        if self.store_history:
+            X_history = jnp.zeros((num_iter, num_points, dim))
+        else:
+            X_history = None
 
         # NOTE: uniform weights for now
         a = jnp.ones((num_points,)) / num_points
 
         return SinkhornStepState(
             -jnp.ones((num_iter,)), -jnp.ones((num_iter,)), 
-            sinkhorn_errors, objective_vals, -jnp.ones((num_iter,)), X_init, a
+            sinkhorn_errors, objective_vals, -jnp.ones((num_iter,)), X_init, X_history, a
         )
 
     @jit
@@ -206,6 +214,11 @@ class SinkhornStep:
             objective_vals = state.objective_vals.at[iteration, :].set(self.cost.evaluate(X_new))
         else:
             objective_vals = None
+        
+        if self.store_history and state.X_history is not None:
+            X_history = state.X_history.at[iteration, :, :].set(X_new)
+        else:
+            X_history = None
 
         displacement_sqnorms = state.displacement_sqnorms.at[iteration].set(jnp.sum((X_new - X)**2, axis=-1).mean())
 
@@ -216,6 +229,7 @@ class SinkhornStep:
             objective_vals=objective_vals,
             displacement_sqnorms=displacement_sqnorms,
             X=X_new,
+            X_history=X_history
         )
 
     def iterations(self, X_init: jnp.array) -> State:
@@ -274,6 +288,7 @@ class SinkhornStep:
             "rank": self.rank,
             "store_inner_errors": self.store_inner_errors,
             "store_outer_evals": self.store_outer_evals,
+            "store_history": self.store_history,
             **self._kwargs
         })
 

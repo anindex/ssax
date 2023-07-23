@@ -29,6 +29,7 @@ class Ackley(ObjectiveFn):
         noise_std: Optional[float] = None,
         negate: bool = False,
         bounds: Optional[List[Tuple[float, float]]] = None,
+        **kwargs: Any
     ) -> None:
         r"""
         Args:
@@ -39,9 +40,9 @@ class Ackley(ObjectiveFn):
         """
         self.dim = dim
         if bounds is None:
-            bounds = jnp.array([(-32.768, 32.768) for _ in range(dim)])
+            bounds = [(-32.768, 32.768) for _ in range(dim)]
         self._optimizers = jnp.zeros(self.dim)
-        super().__init__(noise_std=noise_std, negate=negate, bounds=bounds)
+        super().__init__(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
         self.a = 20
         self.b = 0.2
         self.c = 2 * jnp.pi

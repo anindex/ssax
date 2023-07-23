@@ -1,0 +1,1 @@
+from ssax.objectives.synthetic import *

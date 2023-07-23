@@ -12,7 +12,11 @@ __all__ = ["LinearEpsilon"]
 @jax.tree_util.register_pytree_node_class
 class LinearEpsilon(Epsilon):
 
-    def __init__(self, target: float | None = None, scale_epsilon: float | None = None, init: float = 1, decay: float = 1):
+    def __init__(self, target: float | None = None, 
+                 scale_epsilon: float | None = None, 
+                 init: float = 1, 
+                 decay: float = 1,
+                 **kwargs: Any):
         super().__init__(target, scale_epsilon, init, decay)
 
     def at(self, iteration: Optional[int] = 1) -> float:

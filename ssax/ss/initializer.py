@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, Optional, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple, List
 
 import jax
 import jax.numpy as jnp
@@ -19,7 +19,9 @@ __all__ = [
 class SinkhornStepInitializer(abc.ABC):
     """Base class for Sinkhorn Step initializers."""
 
-    def __init__(self, rng: random.PRNGKeyArray = None) -> None:
+    def __init__(self, 
+                 rng: random.PRNGKeyArray = None,
+                 **kwargs: Any) -> None:
         self.rng = default_prng_key(rng)
 
     @abc.abstractmethod
@@ -54,11 +56,12 @@ class SSGaussianInitializer(SinkhornStepInitializer):
     def __init__(self, 
                  mean: jnp.array, 
                  var: jnp.array, 
-                 rng: random.PRNGKeyArray = None) -> None:
+                 rng: random.PRNGKeyArray = None,
+                 **kwargs: Any) -> None:
         self.mean = mean
         self.var = var
         self.dist = Gaussian.from_mean_and_cov(mean, var)
-        super().__init__(rng)
+        super().__init__(rng, **kwargs)
     
     def init_points(self, num_points: int) -> jnp.array:
         return self.dist.sample(self.rng, num_points)
@@ -82,11 +85,12 @@ class SSUniformInitializer(SinkhornStepInitializer):
     """Uniform Sinkhorn Step initializer."""
 
     def __init__(self, 
-                 bounds: jnp.array,  # [d, 2]
-                 rng: random.PRNGKeyArray = None) -> None:
-        super().__init__(rng)
-        self.bounds = bounds
-        self.dim = bounds.shape[0]
+                 bounds: List[Tuple[float, float]],  # [d, 2]
+                 rng: random.PRNGKeyArray = None,
+                 **kwargs: Any) -> None:
+        super().__init__(rng, **kwargs)
+        self.bounds = jnp.array(bounds)
+        self.dim = self.bounds.shape[0]
 
     def init_points(self, num_points: int) -> jnp.array:
         samples = random.uniform(self.rng, shape=(num_points, self.dim), minval=self.bounds[:, 0], maxval=self.bounds[:, 1])

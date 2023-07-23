@@ -52,7 +52,7 @@ if __name__ == '__main__':
     
     # initialize points
     initializer = SSUniformInitializer(
-        jnp.array([[-5.0, 5.0], [-5.0, 5.0]]),
+        [[-5.0, 5.0], [-5.0, 5.0]],
         rng=rng
     )
     X = initializer(num_points)
@@ -78,28 +78,29 @@ if __name__ == '__main__':
     )
 
     # run Sinkhorn Step
-    state = sinkhorn_step.init_state(X)
-    plt.figure()
-    ax = plt.gca()
-    for i in range(100):
-        plt.clf()
-        tic = time.time()
-        state = sinkhorn_step.step(state, i)
-        toc = time.time()
-        print(f'Iteration {i}, time: {toc - tic}')
-        plot_objective(objective_fn, ax=ax)
-        X = state.X
-        plt.scatter(X[:, 0], X[:, 1], c='r', s=3)
-        ax.set_aspect('equal')
-        plt.draw()
-        plt.pause(1e-4)
-
-    # tic = time.time()
-    # state = sinkhorn_step.iterations(X)
-    # toc = time.time()
-    # print(f'Time: {toc - tic}')
+    # state = sinkhorn_step.init_state(X)
     # plt.figure()
-    # plot_objective(objective_fn)
-    # X = state.X
-    # plt.scatter(X[:, 0], X[:, 1], c='r', s=3)
-    # plt.show()
+    # ax = plt.gca()
+    # for i in range(100):
+    #     plt.clf()
+    #     tic = time.time()
+    #     state = sinkhorn_step.step(state, i)
+    #     toc = time.time()
+    #     print(f'Iteration {i}, time: {toc - tic}')
+    #     plot_objective(objective_fn, ax=ax)
+    #     X = state.X
+    #     plt.scatter(X[:, 0], X[:, 1], c='r', s=3)
+    #     ax.set_aspect('equal')
+    #     plt.draw()
+    #     plt.pause(1e-4)
+
+    tic = time.time()
+    state = sinkhorn_step.iterations(X)
+    toc = time.time()
+    print(np.where(state.linear_convergence == -1)[0].min())
+    print(f'Time: {toc - tic}')
+    plt.figure()
+    plot_objective(objective_fn)
+    X = state.X
+    plt.scatter(X[:, 0], X[:, 1], c='r', s=3)
+    plt.show()

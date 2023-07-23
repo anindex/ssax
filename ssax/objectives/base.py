@@ -29,10 +29,10 @@ class ObjectiveFn(abc.ABC):
         self.noise_std = noise_std
         self.negate = negate
         self._bounds = bounds
-        if self._bounds is not None and self._bounds.shape[0] != self.dim:
+        if self._bounds is not None and len(self._bounds) != self.dim:
             raise ValueError(
                 "Expected the bounds to match the dimensionality of the domain. "
-                f"Got {self.dim=} and {self._bounds.shape=}."
+                f"Got {self.dim=} and {len(self._bounds)=}."
             )
 
     @property

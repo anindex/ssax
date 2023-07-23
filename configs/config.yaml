@@ -1,28 +1,29 @@
 defaults:
-  - experiment: ss-gmm
-  - task: gmm
+  - experiment: ss-ackley
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   # - override hydra/launcher: joblib
+  - _self_
 
 # wandb configs
-project: ss-test
-
-group: "${task.name}-${experiment.model.name}-n_train_data_${task.n_train_data}"
+project: ss-gopt
+group: "${task.name}-${experiment.task.name}-num_points${experiment.num_points}"
 
 # Data loading and logging directories
 saving: True
 debug: False
-plotting: False
-gpu: True
+plotting: True
+save_video: True
+save_result: False
+gpu: False
 max_ram: 12
 data_dir: # If None, the repositories default data_dir is chosen
 logs_dir: # If None, the repositories default logs_dir is chosen
 
-hydra:
-  output_subdir: null
-  run:
-    dir: .
-  launcher:
-    n_jobs: 1
-    backend: Loky
+# hydra:
+#   output_subdir: null
+#   run:
+#     dir: .
+#   launcher:
+#     n_jobs: 1
+#     backend: Loky
