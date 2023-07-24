@@ -13,7 +13,7 @@ class ObjectiveFn(abc.ABC):
     dim: int
     _optimal_value: float
     _optimizers: Optional[jnp.array] = None
-    _bounds: jnp.array
+    bounds: jnp.array
 
     def __init__(self,
                  noise_std: Optional[float] = None,
@@ -28,12 +28,12 @@ class ObjectiveFn(abc.ABC):
         """
         self.noise_std = noise_std
         self.negate = negate
-        self._bounds = bounds
-        if self._bounds is not None and len(self._bounds) != self.dim:
-            raise ValueError(
-                "Expected the bounds to match the dimensionality of the domain. "
-                f"Got {self.dim=} and {len(self._bounds)=}."
-            )
+        self.bounds = bounds
+        # if self.bounds is not None and len(self.bounds) != self.dim:
+        #     raise ValueError(
+        #         "Expected the bounds to match the dimensionality of the domain. "
+        #         f"Got {self.dim=} and {len(self.bounds)=}."
+        #     )
 
     @property
     def optimal_value(self) -> float:
@@ -59,7 +59,7 @@ class ObjectiveFn(abc.ABC):
         return (), {
             "noise_std": self.noise_std,
             "negate": self.negate,
-            "bounds": self._bounds,
+            "bounds": self.bounds,
         }
 
     @classmethod

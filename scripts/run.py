@@ -22,15 +22,6 @@ import ssax.ss.epsilon_scheduler
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig):
-    if cfg.gpu:
-        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=16"
-
-    seed = cfg.experiment.seed
-    rng = jax.random.PRNGKey(seed)
-
     # Set data directory
     data_dir = cfg.data_dir
     if data_dir is None:
@@ -42,12 +33,23 @@ def main(cfg: DictConfig):
         logs_dir = os.path.join(ssax.LOGS_DIR, cfg.experiment.name, time.strftime("%Y%m%d-%H%M%S"))
         os.makedirs(logs_dir, exist_ok=True)
 
+    if cfg.gpu:
+        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=16"
+
+    seed = cfg.experiment.seed
+    rng = jax.random.PRNGKey(seed)
+
     # Load task objective function
     task_cls = getattr(ssax.objectives, cfg.experiment.task.name)
     task: ObjectiveFn = task_cls(**cfg.experiment.task.kwargs)
 
     # Sample initializer
     init_cls = getattr(ssax.ss.initializer, cfg.experiment.initializer.name)
+    if task.bounds is not None:
+        cfg.experiment.initializer.kwargs.bounds = task.bounds
     initializer = init_cls(rng=rng, **cfg.experiment.initializer.kwargs)
 
     # Linear solver
@@ -70,22 +72,31 @@ def main(cfg: DictConfig):
     )
 
     X_init = initializer(cfg.experiment.num_points)
+    tic = time.time()
     res = global_optimizer.iterations(X_init)
-    converged_at = jnp.where(res.linear_convergence == -1)[0].min()  # NOTE: this is a hack
+    toc = time.time()
+    print(f"Optimization time: {toc - tic:.2f} s")
+
+    # NOTE: this is a hack getting converged iteration index
+    cid = jnp.where(res.linear_convergence == -1)[0]
+    if len(cid) == 0:
+        converged_at = res.linear_convergence.shape[0]
+    else:
+        converged_at = cid.min()
 
     # Plotting
-    if cfg.experiment.task.kwargs.bounds is None:
-        limits = np.array([[-6.0, 6.0], [-6.0, 6.0]])
+    if task.bounds is None:
+        bounds = [[-10.0, 10.0], [-10.0, 10.0]]
     else:
-        limits = np.array(cfg.experiment.task.kwargs.bounds)
+        bounds = task.bounds
     fig, ax = plt.subplots()
-    ax.set_xlim(*limits[0, :])
-    ax.set_ylim(*limits[1, :])
+    ax.set_xlim(*bounds[0])
+    ax.set_ylim(*bounds[1])
     ax.set_aspect('equal')
     ax.axis('off')
     ax.set_title(f"{cfg.experiment.name}")
     plot_objective(objective_fn=task, ax=ax)
-    text = ax.text(5, 6, f'Iters {0}', style='italic')
+    text = ax.text(bounds[0][1], bounds[1][1] + 0.5, f'Iters {0}', style='italic')
     scatter = ax.scatter(X_init[:, 0], X_init[:, 1], s=3)
     fig.tight_layout()
 
@@ -108,10 +119,6 @@ def main(cfg: DictConfig):
         # Save figure
         fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.png")
         fig.savefig(fig_name, dpi=300)
-
-    # Save configs
-    # config_name = os.path.join(logs_dir, "config.yaml")
-    # OmegaConf.save(cfg, config_name)
 
     # Save results
     if cfg.save_result:

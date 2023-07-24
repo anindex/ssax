@@ -1,8 +1,8 @@
 defaults:
-  - task: Ackley
+  - task: StyblinskiTang
 
 # Task-specific configurations
-name: ss-ackley
+name: ss-st
 seed: 0
 
 # Hyper-parameters
@@ -18,7 +18,7 @@ linear_solver:
     threshold: 1e-3
     inner_iterations: 1
     min_iterations: 1
-    max_iterations: 100
+    max_iterations: 80
     initializer: 'default'
 
 epsilon_scheduler:
@@ -26,17 +26,17 @@ epsilon_scheduler:
   kwargs:
     target: 0.3
     init: 1.0
-    decay: 0.01
+    decay: 0.
 
 optimizer:
   name: SinkhornStep
   kwargs:
     polytope_type: 'orthoplex'
-    step_radius: 0.15
-    probe_radius: 0.2
+    step_radius: 0.03
+    probe_radius: 0.05
     num_probe: 5
     min_iterations: 5
     max_iterations: 100
     threshold: 1e-3
 
-num_points: 100000
+num_points: 10000
