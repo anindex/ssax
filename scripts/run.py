@@ -8,6 +8,7 @@ from matplotlib import animation, rc
 rc('animation', html='html5')
 
 from omegaconf import DictConfig, OmegaConf
+from hydra.conf import HydraConf
 import jax
 import jax.numpy as jnp
 
@@ -31,7 +32,7 @@ def main(cfg: DictConfig):
     logs_dir = cfg.logs_dir
     if logs_dir is None:
         logs_dir = os.path.join(ssax.LOGS_DIR, cfg.experiment.name, time.strftime("%Y%m%d-%H%M%S"))
-        os.makedirs(logs_dir, exist_ok=True)
+    os.makedirs(logs_dir, exist_ok=True)
 
     if cfg.gpu:
         os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"

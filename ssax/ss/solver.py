@@ -56,6 +56,9 @@ class SinkhornStep:
         linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn",
                                          "sinkhorn_lr.LRSinkhorn"]] = None,
         epsilon: Optional[Union[Epsilon, float]] = None,
+        ent_epsilon: Optional[Union[Epsilon, float]] = None,
+        ent_relative_epsilon: Optional[bool] = None,
+        scale_cost: Optional[Union[str, float]] = 1.0,
         step_radius: float = 1.,
         probe_radius: float = 2.,
         random_probe: bool = False,
@@ -72,7 +75,7 @@ class SinkhornStep:
         rng: Optional[jax.random.PRNGKeyArray] = None,
         **kwargs: Any,
     ):
-        default_epsilon = 1.0
+        default_epsilon = 0.1
 
         self.objective_fn = objective_fn
         self.dim = self.objective_fn.dim
@@ -85,6 +88,9 @@ class SinkhornStep:
             self.direction_set = 'random'
         self.polytope_vertices = POLYTOPE_MAP[self.polytope_type](jnp.zeros((self.dim,)))
         self.epsilon = epsilon if epsilon is not None else default_epsilon
+        self.ent_epsilon = ent_epsilon
+        self.ent_relative_epsilon = ent_relative_epsilon
+        self.scale_cost = scale_cost
         self.step_radius = step_radius
         self.probe_radius = probe_radius
         self.random_probe = random_probe
@@ -195,7 +201,10 @@ class SinkhornStep:
                                                                                 rng=self.rng)
 
         # solve Sinkhorn
-        cost = GenericCost(self.objective_fn, X_probe)
+        cost = GenericCost(self.objective_fn, X_probe, 
+                           epsilon=self.ent_epsilon,
+                           relative_epsilon=self.ent_relative_epsilon,
+                           scale_cost=self.scale_cost,)
         ot_prob = linear_problem.LinearProblem(cost)
         res = self.linear_ot_solver(ot_prob)
 
@@ -275,7 +284,9 @@ class SinkhornStep:
         return state
 
     def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:
-        return ([self.objective_fn, self.linear_ot_solver, self.epsilon], {
+        return ([self.objective_fn, self.linear_ot_solver, self.epsilon, self.ent_epsilon], {
+            "ent_relative_epsilon": self.ent_relative_epsilon,
+            "scale_cost": self.scale_cost,
             "polytope_type": self.polytope_type,
             "step_radius": self.step_radius,
             "probe_radius": self.probe_radius,
@@ -296,11 +307,12 @@ class SinkhornStep:
     def tree_unflatten(
         cls, aux_data: Dict[str, Any], children: Sequence[Any]
     ) -> "SinkhornStep":
-        objective_fn, linear_ot_solver, epsilon = children
+        objective_fn, linear_ot_solver, epsilon, ent_epsilon = children
         return cls(
             objective_fn=objective_fn,
             linear_ot_solver=linear_ot_solver,
             epsilon=epsilon,
+            ent_epsilon=ent_epsilon,
             **aux_data
         )
 

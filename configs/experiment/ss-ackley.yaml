@@ -31,6 +31,9 @@ epsilon_scheduler:
 optimizer:
   name: SinkhornStep
   kwargs:
+    # ent_epsilon: None
+    # scale_cost: 'max_cost'
+    # scale_cost: 1.0
     polytope_type: 'orthoplex'
     step_radius: 0.15
     probe_radius: 0.2

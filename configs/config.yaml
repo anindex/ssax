@@ -18,11 +18,11 @@ save_result: False
 gpu: False
 max_ram: 12
 data_dir: # If None, the repositories default data_dir is chosen
-logs_dir: # If None, the repositories default logs_dir is chosen
+logs_dir: ./logs/${experiment.name}/${now:%Y%m%d-%H%M%S}
 
 hydra:
   run:
-    dir: ./logs/${experiment.name}/${now:%Y%m%d-%H%M%S}
+    dir: ${logs_dir}
   # launcher:
   #   n_jobs: 1
   #   backend: Loky
