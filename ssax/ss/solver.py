@@ -14,7 +14,7 @@ from ssax.ss.utils import default_prng_key
 from ssax.ss.polytopes import POLYTOPE_MAP, SAMPLE_POLYTOPE_MAP
 
 
-__all__ = ["SinkhornStep"]
+__all__ = ["SinkhornStepState", "SinkhornStep"]
 
 
 class SinkhornStepState(NamedTuple):
@@ -44,7 +44,9 @@ class SinkhornStepState(NamedTuple):
         """Return a copy of self, possibly with overwrites."""
         return self._replace(**kwargs)
 
+
 State = SinkhornStepState
+
 
 @jax.tree_util.register_pytree_node_class
 class SinkhornStep:
@@ -241,6 +243,7 @@ class SinkhornStep:
             X_history=X_history
         )
 
+    @jit
     def iterations(self, X_init: jnp.array) -> State:
         """Jittable Sinkhorn Step outer loop.
 

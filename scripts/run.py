@@ -74,6 +74,11 @@ def main(cfg: DictConfig):
 
     X_init = initializer(cfg.experiment.num_points)
     tic = time.time()
+    global_optimizer.iterations(X_init)
+    toc = time.time()
+    print(f"Warm up JIT compile time: {toc - tic:.2f} s")
+
+    tic = time.time()
     res = global_optimizer.iterations(X_init)
     toc = time.time()
     print(f"Optimization time: {toc - tic:.2f} s")

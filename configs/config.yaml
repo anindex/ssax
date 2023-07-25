@@ -1,5 +1,5 @@
 defaults:
-  - experiment: ss-ackley
+  - experiment: ss-al
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   # - override hydra/launcher: joblib
@@ -10,7 +10,6 @@ project: ss-gopt
 group: "${task.name}-${experiment.task.name}-num_points${experiment.num_points}"
 
 # Data loading and logging directories
-saving: True
 debug: False
 plotting: True
 save_video: True

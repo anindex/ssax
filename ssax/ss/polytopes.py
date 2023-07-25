@@ -47,7 +47,7 @@ def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp
     return points
 
 
-@partial(jit, static_argnames=['num_probe', 'random_probe'])
+# @partial(jit, static_argnames=['num_probe', 'random_probe'])
 def get_sampled_polytope_vertices(origin: jnp.array, 
                                   polytope_vertices: jnp.array, 
                                   step_radius: float = 1., 
@@ -71,7 +71,7 @@ def get_sampled_polytope_vertices(origin: jnp.array,
     return step_points, probe_points, polytope_vertices
 
 
-@partial(jit, static_argnames=['num_probe', 'num_sphere_point', 'random_probe'])
+# @partial(jit, static_argnames=['num_probe', 'num_sphere_point', 'random_probe'])
 def get_sampled_points_on_sphere(origin: jnp.array,
                                  step_radius: float = 1., 
                                  probe_radius: float = 2., 
