@@ -559,7 +559,7 @@ class Rosenbrock(ObjectiveFn):
     ) -> None:
         self.dim = dim
         if bounds is None:
-            bounds = [(-5.0, 10.0) for _ in range(self.dim)]
+            bounds = [(-5.0, 5.0) for _ in range(self.dim)]
         self._optimizers = [tuple(1.0 for _ in range(self.dim))]
         super().__init__(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 

@@ -1,0 +1,6 @@
+name: DropWave
+kwargs:
+  dim: 2
+  noise_std: 0.0
+  negate: False
+

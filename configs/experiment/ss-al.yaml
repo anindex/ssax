@@ -2,7 +2,7 @@ defaults:
   - task: Ackley
 
 # Task-specific configurations
-name: ss-ackley
+name: ss-al
 seed: 0
 
 # Hyper-parameters

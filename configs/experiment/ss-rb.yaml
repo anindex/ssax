@@ -1,0 +1,45 @@
+defaults:
+  - task: Rosenbrock
+
+# Task-specific configurations
+name: ss-rb
+seed: 0
+
+# Hyper-parameters
+
+initializer:
+  name: SSUniformInitializer
+  kwargs:
+    bounds: [[-5.0, 5.0], [-5.0, 5.0]]
+
+linear_solver:
+  name: Sinkhorn
+  kwargs:
+    threshold: 1e-3
+    inner_iterations: 1
+    min_iterations: 1
+    max_iterations: 100
+    initializer: 'default'
+
+epsilon_scheduler:
+  name: LinearEpsilon
+  kwargs:
+    target: 0.1
+    init: 1.0
+    decay: 0.01
+
+optimizer:
+  name: SinkhornStep
+  kwargs:
+    ent_epsilon: 0.1
+    # scale_cost: 'max_cost'
+    # scale_cost: 1.0
+    polytope_type: 'orthoplex'
+    step_radius: 0.1
+    probe_radius: 0.15
+    num_probe: 5
+    min_iterations: 5
+    max_iterations: 100
+    threshold: 1e-3
+
+num_points: 10000
