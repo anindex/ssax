@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, Optional, Sequence, Tuple, List
+from typing import Any, Dict, Optional, Sequence, Tuple, List, Union
 
 import jax
 import jax.numpy as jnp
@@ -54,17 +54,24 @@ class SSGaussianInitializer(SinkhornStepInitializer):
     """Gaussian Sinkhorn Step initializer."""
 
     def __init__(self, 
-                 mean: jnp.array, 
-                 var: jnp.array, 
+                 mean: List[float], 
+                 var: Union[List[float], float], 
                  rng: random.PRNGKeyArray = None,
                  **kwargs: Any) -> None:
-        self.mean = mean
-        self.var = var
+        self.mean = jnp.array(mean)
+        if isinstance(var, float):
+            self.var = var * jnp.eye(self.mean.shape[0])
+        else:
+            self.var = jnp.array(var)
         self.dist = Gaussian.from_mean_and_cov(mean, var)
         super().__init__(rng, **kwargs)
-    
-    def init_points(self, num_points: int) -> jnp.array:
-        return self.dist.sample(self.rng, num_points)
+
+    def init_points(self, 
+                    num_points: int,
+                    rng: Optional[random.PRNGKeyArray] = None) -> jnp.array:
+        if rng is None:
+            rng = self.rng
+        return self.dist.sample(rng, num_points)
 
     def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:  
         return [
@@ -92,10 +99,14 @@ class SSUniformInitializer(SinkhornStepInitializer):
         self.bounds = jnp.array(bounds)
         self.dim = self.bounds.shape[0]
 
-    def init_points(self, num_points: int) -> jnp.array:
-        samples = random.uniform(self.rng, shape=(num_points, self.dim), minval=self.bounds[:, 0], maxval=self.bounds[:, 1])
+    def init_points(self, 
+                    num_points: int,
+                    rng: Optional[random.PRNGKeyArray] = None) -> jnp.array:
+        if rng is None:
+            rng = self.rng
+        samples = random.uniform(rng, shape=(num_points, self.dim), minval=self.bounds[:, 0], maxval=self.bounds[:, 1])
         return samples
-    
+
     def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:  
         return [
             self.bounds

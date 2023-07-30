@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, NamedTuple
 
 import jax
-from jax import jit
+from jax import jit, random
 import jax.numpy as jnp
 
 from ott.solvers.linear import sinkhorn, sinkhorn_lr
@@ -191,7 +191,8 @@ class SinkhornStep:
         eps = self.epsilon.at(iteration) if isinstance(self.epsilon, Epsilon) else self.epsilon
         step_radius = self.step_radius * eps
         probe_radius = self.probe_radius * eps
-        
+        rng, subkey = random.split(self.rng)
+
         # compute sampled polytope vertices
         X_vertices, X_probe, vertices = SAMPLE_POLYTOPE_MAP[self.direction_set](X,
                                                                                 polytope_vertices=self.polytope_vertices,
@@ -200,7 +201,7 @@ class SinkhornStep:
                                                                                 num_probe=self.num_probe,
                                                                                 random_probe=self.random_probe,
                                                                                 num_sphere_point=self.num_sphere_point,
-                                                                                rng=self.rng)
+                                                                                rng=subkey)
 
         # solve Sinkhorn
         cost = GenericCost(self.objective_fn, X_probe, 
