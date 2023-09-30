@@ -25,6 +25,5 @@ from ssax.objectives.visualization import plot_objective
 
 if __name__ == '__main__':
     plt.figure()
-    # plot_objective(Ackley())
-    plot_objective(EggHolder(), resolution=200)
+    plot_objective(Ackley.create(), resolution=200)
     plt.show()

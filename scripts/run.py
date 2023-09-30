@@ -11,6 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.conf import HydraConf
 import jax
 import jax.numpy as jnp
+from jax import jit
 
 from ssax.objectives.visualization import plot_objective
 import ssax.objectives
@@ -45,13 +46,13 @@ def main(cfg: DictConfig):
 
     # Load task objective function
     task_cls = getattr(ssax.objectives, cfg.experiment.task.name)
-    task: ObjectiveFn = task_cls(**cfg.experiment.task.kwargs)
+    task: ObjectiveFn = task_cls.create(**cfg.experiment.task.kwargs)
 
     # Sample initializer
     init_cls = getattr(ssax.ss.initializer, cfg.experiment.initializer.name)
     if task.bounds is not None:
-        cfg.experiment.initializer.kwargs.bounds = task.bounds
-    initializer = init_cls(rng=rng, **cfg.experiment.initializer.kwargs)
+        cfg.experiment.initializer.kwargs.bounds = task.bounds.tolist()
+    initializer = init_cls.create(rng=rng, **cfg.experiment.initializer.kwargs)
 
     # Linear solver
     solver_cls = getattr(ssax.ss.linear_solver, cfg.experiment.linear_solver.name)
@@ -63,23 +64,21 @@ def main(cfg: DictConfig):
 
     # global optimizer  # TODO: make a base class for global optimizers
     global_optimizer_cls = getattr(ssax.ss.solver, cfg.experiment.optimizer.name)
-    global_optimizer = global_optimizer_cls(
+    global_optimizer = global_optimizer_cls.create(
         objective_fn=task,
         linear_ot_solver=linear_ot_solver,
         epsilon=epsilon_scheduler,
-        rng=rng,
-        store_history=cfg.save_video,  # NOTE: only store history if we are saving video
         **cfg.experiment.optimizer.kwargs
     )
 
     X_init = initializer(cfg.experiment.num_points)
     tic = time.time()
-    global_optimizer.iterations(X_init)
+    init_state = global_optimizer.warm_start(X_init, rng=rng)
     toc = time.time()
     print(f"Warm up JIT compile time: {toc - tic:.2f} s")
 
     tic = time.time()
-    res = global_optimizer.iterations(X_init)
+    res = global_optimizer.iterations(init_state)
     toc = time.time()
     print(f"Optimization time: {toc - tic:.2f} s")
 
@@ -107,6 +106,7 @@ def main(cfg: DictConfig):
     fig.tight_layout()
 
     if cfg.save_video:
+        print("Rendering GIF...")
         X_hist = res.X_history
         def plot_particle(iter):
             """ Plots the objective function in 2D """
@@ -125,6 +125,33 @@ def main(cfg: DictConfig):
         # Save figure
         fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.png")
         fig.savefig(fig_name, dpi=300)
+
+        sinkhorn_errors = res.sinkhorn_errors
+        plt.figure()
+        plt.plot(sinkhorn_errors)
+        plt.yscale('log')
+        plt.xlabel('Iterations')
+        plt.ylabel('Sinkhorn error')
+        plt.title(f"{cfg.experiment.name}")
+        plt.tight_layout()
+        # Save figure
+        fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}_sinkhorn_error.png")
+        plt.savefig(fig_name, dpi=300)
+
+        objective_vals = res.objective_vals
+        mean = objective_vals.mean(axis=-1)
+        std = objective_vals.std(axis=-1)
+        plt.figure()
+        plt.plot(mean)
+        plt.fill_between(np.arange(mean.shape[0]), mean - std, mean + std, alpha=0.3)
+        plt.yscale('log')
+        plt.xlabel('Iterations')
+        plt.ylabel('Objective value')
+        plt.title(f"{cfg.experiment.name}")
+        plt.tight_layout()
+        # Save figure
+        fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}_objective_value.png")
+        plt.savefig(fig_name, dpi=300)
 
     # Save results
     if cfg.save_result:

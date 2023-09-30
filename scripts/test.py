@@ -9,7 +9,7 @@ import time
 from ott.solvers.linear.sinkhorn import Sinkhorn
 from ott.geometry.epsilon_scheduler import Epsilon
 
-from ssax.ss.initializer import SSGaussianInitializer, SSUniformInitializer
+from ssax.ss.initializer import GaussianInitializer, UniformInitializer
 from ssax.ss.costs import GenericCost
 from ssax.ss.solver import SinkhornStep
 from ssax.ss.epsilon_scheduler import LinearEpsilon
@@ -23,12 +23,12 @@ if __name__ == '__main__':
     # plot_objective(Ackley())
     # rng = jax.random.PRNGKey(0)
     # num_points = 100
-    # # initializer = SSGaussianInitializer(
+    # # initializer = GaussianInitializer(
     # #     jnp.array([0.0, 0.0]),
     # #     jnp.eye(2),
     # #     rng=rng
     # # )
-    # initializer = SSUniformInitializer(
+    # initializer = UniformInitializer(
     #     jnp.array([[-5.0, 5.0], [-5.0, 5.0]]),
     #     rng=rng
     # )
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     objective_fn = Ackley()
     
     # initialize points
-    initializer = SSUniformInitializer(
+    initializer = UniformInitializer(
         [[-5.0, 5.0], [-5.0, 5.0]],
         rng=rng
     )

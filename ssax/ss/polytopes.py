@@ -47,13 +47,12 @@ def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp
     return points
 
 
-# @partial(jit, static_argnames=['num_probe', 'random_probe'])
-def get_sampled_polytope_vertices(origin: jnp.array, 
+# @jit
+def get_sampled_polytope_vertices(origin: jnp.array,
+                                  probes: jnp.array,
                                   polytope_vertices: jnp.array, 
                                   step_radius: float = 1., 
-                                  probe_radius: float = 2., 
-                                  num_probe: int = 5, 
-                                  random_probe: bool = False,
+                                  probe_radius: float = 2.,
                                   rng: jax.random.PRNGKey = None,
                                   **kwargs) -> Tuple[jnp.array]:
     if origin.ndim == 1:
@@ -64,19 +63,14 @@ def get_sampled_polytope_vertices(origin: jnp.array,
     max_torus_mat = get_random_maximal_torus_matrix(origin, rng=rng)
     polytope_vertices = polytope_vertices @ max_torus_mat
     step_points = polytope_vertices * step_radius + origin[:, jnp.newaxis, ...]  # [batch, num_vertices, dim]
-    if random_probe:
-        probe_points = get_random_probe_points(origin, polytope_vertices, probe_radius, num_probe, rng=rng)
-    else:
-        probe_points = get_probe_points(origin, polytope_vertices, probe_radius, num_probe)  # [batch, num_vertices, num_probe, dim]
+    probe_points = get_probe_points(origin, polytope_vertices, probes, probe_radius)  # [batch, num_vertices, num_probe, dim]
     return step_points, probe_points, polytope_vertices
 
 
-# @partial(jit, static_argnames=['num_probe', 'num_sphere_point', 'random_probe'])
 def get_sampled_points_on_sphere(origin: jnp.array,
                                  step_radius: float = 1., 
                                  probe_radius: float = 2., 
                                  num_probe: int = 5, 
-                                 random_probe: bool = False,
                                  num_sphere_point: int = 50,
                                  rng: jax.random.PRNGKey = None,
                                  **kwargs) -> Tuple[jnp.array]:
@@ -88,10 +82,7 @@ def get_sampled_points_on_sphere(origin: jnp.array,
     points = random.normal(rng, shape=(batch, num_sphere_point, dim), dtype=origin.dtype)  # [batch, num_points, dim]
     points = points / jnp.linalg.norm(points, axis=-1, keepdims=True)
     step_points = points * step_radius + origin[:, jnp.newaxis, :] # [batch, num_points, dim]
-    if random_probe:
-        probe_points = get_random_probe_points(origin, points, probe_radius, num_probe, rng=rng)
-    else:
-        probe_points = get_probe_points(origin, points, probe_radius, num_probe)  # [batch, 2 * dim, num_probe, dim]
+    probe_points = get_probe_points(origin, points, probe_radius, num_probe)  # [batch, 2 * dim, num_probe, dim]
     return step_points, probe_points, points
 
 

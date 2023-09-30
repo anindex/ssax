@@ -1,9 +1,10 @@
-from typing import Any, Dict, Optional, Sequence, Tuple, Union, NamedTuple
+from typing import Any, Dict, Optional, Sequence, Tuple, Union, Callable
 
 import jax
 from jax import jit, random
 import jax.numpy as jnp
-
+from flax import struct
+from functools import partial
 from ott.solvers.linear import sinkhorn, sinkhorn_lr
 from ott.problems.linear import linear_problem
 from ott.geometry.epsilon_scheduler import Epsilon
@@ -11,13 +12,48 @@ from ott.math import fixed_point_loop
 
 from ssax.ss.costs import GenericCost
 from ssax.ss.utils import default_prng_key
-from ssax.ss.polytopes import POLYTOPE_MAP, SAMPLE_POLYTOPE_MAP
+from ssax.ss.polytopes import POLYTOPE_MAP, get_sampled_polytope_vertices, get_sampled_points_on_sphere
 
 
 __all__ = ["SinkhornStepState", "SinkhornStep"]
 
 
-class SinkhornStepState(NamedTuple):
+def outer_loop(
+    cond_fn: Callable[[int, Any, Any], bool],
+    body_fn: Callable[[Any, Any, Any, Any], Any], min_iterations: int,
+    max_iterations: int, inner_iterations: int, constants: Any, state: Any
+):
+    """Fixed point iteration with early stopping."""
+    compute_error_flags = jnp.arange(inner_iterations) == inner_iterations - 1
+
+    def max_cond_fn(iteration_state):
+        iteration, state = iteration_state
+        return jnp.logical_and(
+            iteration < max_iterations,
+            jnp.logical_or(
+                iteration < min_iterations, cond_fn(iteration, constants, state)
+            )
+        )
+
+    def unrolled_body_fn(iteration_state):
+
+        def one_iteration(iteration_state, compute_error):
+            iteration, state = iteration_state
+            state = body_fn(iteration, constants, state, compute_error)
+            iteration += 1
+            return (iteration, state), None
+
+        iteration_state, _ = jax.lax.scan(
+            one_iteration, iteration_state, compute_error_flags
+        )
+        return iteration_state
+
+    _, state = jax.lax.while_loop(max_cond_fn, unrolled_body_fn, (0, state))
+    return state
+
+
+@struct.dataclass
+class SinkhornStepState():
     """Holds the state of the Wasserstein barycenter solver.
 
     Args:
@@ -31,40 +67,59 @@ class SinkhornStepState(NamedTuple):
         a: weights of the barycenter. (not using)
     """
 
-    costs: Optional[jnp.array] = None
+    costs: jnp.array = None
+    X: jnp.array = None
     linear_convergence: Optional[jnp.array] = None
     sinkhorn_errors: Optional[jnp.array] = None
     objective_vals: Optional[jnp.array] = None
     displacement_sqnorms: Optional[jnp.array] = None
-    X: Optional[jnp.array] = None
     X_history: Optional[jnp.array] = None
     a: Optional[jnp.array] = None
+    rng: Optional[jax.random.PRNGKeyArray] = None
 
     def set(self, **kwargs: Any) -> "SinkhornStepState":
         """Return a copy of self, possibly with overwrites."""
-        return self._replace(**kwargs)
+        return self.replace(**kwargs)
 
 
 State = SinkhornStepState
 
 
-@jax.tree_util.register_pytree_node_class
-class SinkhornStep:
+@struct.dataclass
+class SinkhornStep():
     """Sinkhorn Step solver for problems that use a linear problem in inner loop."""
 
-    def __init__(
-        self,
+    objective_fn: Any = None
+    dim: int = None
+    polytope_vertices: jnp.array = None
+    linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = None
+    epsilon: Union[Epsilon, float] = 0.1
+    ent_epsilon: Union[Epsilon, float] = None
+    ent_relative_epsilon: bool = False
+    scale_cost: float = 1.0
+    step_radius: float = 1.
+    probe_radius: float = 2.
+    probes: jnp.array = None
+    rank: int = -1
+    min_iterations: int = 5
+    max_iterations: int = 50
+    threshold: float = 1e-3
+    store_inner_errors: bool = False
+    store_outer_evals: bool = False
+    store_history: bool = False
+
+    @classmethod
+    def create(
+        cls,
         objective_fn: Any,
         linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn",
                                          "sinkhorn_lr.LRSinkhorn"]] = None,
-        epsilon: Optional[Union[Epsilon, float]] = None,
+        epsilon: Optional[Union[Epsilon, float]] = 0.1,
         ent_epsilon: Optional[Union[Epsilon, float]] = None,
         ent_relative_epsilon: Optional[bool] = None,
         scale_cost: Optional[Union[str, float]] = 1.0,
         step_radius: float = 1.,
         probe_radius: float = 2.,
-        random_probe: bool = False,
-        num_sphere_point: int = 50,
         num_probe: int = 5,
         polytope_type: str = 'orthoplex',
         min_iterations: int = 5,
@@ -74,70 +129,65 @@ class SinkhornStep:
         store_inner_errors: bool = False,
         store_outer_evals: bool = False,
         store_history: bool = False,
-        rng: Optional[jax.random.PRNGKeyArray] = None,
         **kwargs: Any,
-    ):
-        default_epsilon = 0.1
-
-        self.objective_fn = objective_fn
-        self.dim = self.objective_fn.dim
+    ) -> "SinkhornStep":
+        is_low_rank = rank > 0
+        dim = objective_fn.dim
 
         # Sinkhorn Step params
-        self.polytope_type = polytope_type
-        if self.polytope_type in POLYTOPE_MAP:
-            self.direction_set = 'polytope'
-        else:
-            self.direction_set = 'random'
-        self.polytope_vertices = POLYTOPE_MAP[self.polytope_type](jnp.zeros((self.dim,)))
-        self.epsilon = epsilon if epsilon is not None else default_epsilon
-        self.ent_epsilon = ent_epsilon
-        self.ent_relative_epsilon = ent_relative_epsilon
-        self.scale_cost = scale_cost
-        self.step_radius = step_radius
-        self.probe_radius = probe_radius
-        self.random_probe = random_probe
-        self.num_sphere_point = num_sphere_point
-        self.num_probe = num_probe
-
-        self.rank = rank
-        self.linear_ot_solver = linear_ot_solver
-        if self.linear_ot_solver is None:
-            if self.is_low_rank:
+        use_polytope = polytope_type in POLYTOPE_MAP
+        polytope_vertices = POLYTOPE_MAP[polytope_type](jnp.zeros((dim,)))
+        probes = jnp.linspace(0, 1, num_probe + 2)[1:num_probe + 1]
+        if linear_ot_solver is None:
+            if is_low_rank:
                 if epsilon is None:
                     # Use default entropic regularization in LRSinkhorn if None was passed
-                    self.linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=self.rank, **kwargs
+                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                        rank=rank, **kwargs
                     )
                 else:
                     # If epsilon is passed, use it to replace the default LRSinkhorn value
-                    self.linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=self.rank, epsilon=self.epsilon, **kwargs
+                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                        rank=rank, epsilon=epsilon, **kwargs
                     )
         else:  # NOTE: current implementation does not support low-rank solvers
-            self.linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
-
-        self.min_iterations = min_iterations
-        self.max_iterations = max_iterations
-        self.threshold = threshold
-        self.store_inner_errors = store_inner_errors
-        self.store_outer_evals = store_outer_evals
-        self.store_history = store_history
-        self.rng = default_prng_key(rng)
-        self._kwargs = kwargs
+            linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
 
         # init uniform weights
         # TODO: support non-uniform weights for conditional sinkhorn step
         # self.a = jnp.ones((num_points,)) / num_points
         # self.b = jnp.ones((self.polytope_vertices.shape[0],)) / self.polytope_vertices.shape[0]
+        return cls(
+            objective_fn=objective_fn,
+            dim=dim,
+            polytope_vertices=polytope_vertices,
+            linear_ot_solver=linear_ot_solver,
+            epsilon=epsilon,
+            ent_epsilon=ent_epsilon,
+            ent_relative_epsilon=ent_relative_epsilon,
+            scale_cost=scale_cost,
+            step_radius=step_radius,
+            probe_radius=probe_radius,
+            probes=probes,
+            rank=rank,
+            min_iterations=min_iterations,
+            max_iterations=max_iterations,
+            threshold=threshold,
+            store_inner_errors=store_inner_errors,
+            store_outer_evals=store_outer_evals,
+            store_history=store_history,
+            **kwargs
+        )
 
     @property
     def is_low_rank(self) -> bool:
         """Whether the solver is low-rank."""
         return self.rank > 0
-    
+
     def init_state(
         self,
         X_init: jnp.array,
+        rng: Optional[jax.random.PRNGKeyArray] = None,
     ) -> SinkhornStepState:
         """Initialize the state of the Wasserstein barycenter iterations.
 
@@ -154,33 +204,23 @@ class SinkhornStep:
         The initial barycenter state.
         """
         num_points, dim = X_init.shape
-        assert dim == self.dim
 
         num_iter = self.max_iterations
-        if self.store_inner_errors:
-            sinkhorn_errors = -jnp.ones((
-                num_iter,
-                self.linear_ot_solver.outer_iterations,
-            ))
-        else:
-            sinkhorn_errors = None
-        
-        if self.store_outer_evals:
-            objective_vals = -jnp.ones((num_iter, num_points))
-        else:
-            objective_vals = None
-        
-        if self.store_history:
-            X_history = jnp.zeros((num_iter, num_points, dim))
-        else:
-            X_history = None
+        sinkhorn_errors = -jnp.ones((
+            num_iter,
+            self.linear_ot_solver.outer_iterations,
+        ))
+        objective_vals = -jnp.ones((num_iter, num_points))
+        X_history = jnp.zeros((num_iter, num_points, dim))
 
         # NOTE: uniform weights for now
         a = jnp.ones((num_points,)) / num_points
 
         return SinkhornStepState(
-            -jnp.ones((num_iter,)), -jnp.ones((num_iter,)), 
-            sinkhorn_errors, objective_vals, -jnp.ones((num_iter,)), X_init, X_history, a
+            costs=-jnp.ones((num_iter,)), X=X_init, linear_convergence=-jnp.ones((num_iter,)),
+            sinkhorn_errors=sinkhorn_errors, objective_vals=objective_vals, 
+            displacement_sqnorms=-jnp.ones((num_iter,)), X_history=X_history, a=a,
+            rng=default_prng_key(rng)
         )
 
     @jit
@@ -191,17 +231,15 @@ class SinkhornStep:
         eps = self.epsilon.at(iteration) if isinstance(self.epsilon, Epsilon) else self.epsilon
         step_radius = self.step_radius * eps
         probe_radius = self.probe_radius * eps
-        rng, subkey = random.split(self.rng)
+        rng, sub_rng = random.split(state.rng)
 
         # compute sampled polytope vertices
-        X_vertices, X_probe, vertices = SAMPLE_POLYTOPE_MAP[self.direction_set](X,
-                                                                                polytope_vertices=self.polytope_vertices,
-                                                                                step_radius=step_radius,
-                                                                                probe_radius=probe_radius,
-                                                                                num_probe=self.num_probe,
-                                                                                random_probe=self.random_probe,
-                                                                                num_sphere_point=self.num_sphere_point,
-                                                                                rng=subkey)
+        X_vertices, X_probe, vertices = get_sampled_polytope_vertices(X,
+                                                                      polytope_vertices=self.polytope_vertices,
+                                                                      step_radius=step_radius,
+                                                                      probe_radius=probe_radius,
+                                                                      probes=self.probes,
+                                                                      rng=sub_rng)
 
         # solve Sinkhorn
         cost = GenericCost(self.objective_fn, X_probe, 
@@ -217,20 +255,10 @@ class SinkhornStep:
         updated_costs = state.costs.at[iteration].set(res.ent_reg_cost)
         linear_convergence = state.linear_convergence.at[iteration].set(res.converged)
 
-        if self.store_inner_errors and state.sinkhorn_errors is not None:
-            sinkhorn_errors = state.sinkhorn_errors.at[iteration, :].set(res.errors)
-        else:
-            sinkhorn_errors = None
-
-        if self.store_outer_evals and state.objective_vals is not None:
-            objective_vals = state.objective_vals.at[iteration, :].set(self.cost.evaluate(X_new))
-        else:
-            objective_vals = None
-        
-        if self.store_history and state.X_history is not None:
-            X_history = state.X_history.at[iteration, :, :].set(X_new)
-        else:
-            X_history = None
+        # optimization statistics NOTE: comment those if not needed
+        sinkhorn_errors = state.sinkhorn_errors.at[iteration, :].set(res.errors)
+        objective_vals = state.objective_vals.at[iteration, :].set(self.objective_fn(X_new))
+        X_history = state.X_history.at[iteration, :, :].set(X_new)
 
         displacement_sqnorms = state.displacement_sqnorms.at[iteration].set(jnp.sum((X_new - X)**2, axis=-1).mean())
 
@@ -241,12 +269,21 @@ class SinkhornStep:
             objective_vals=objective_vals,
             displacement_sqnorms=displacement_sqnorms,
             X=X_new,
-            X_history=X_history
+            X_history=X_history,
+            rng=rng,
         )
 
-    @jit
-    def iterations(self, X_init: jnp.array) -> State:
-        """Jittable Sinkhorn Step outer loop.
+    def warm_start(self, X_init: jnp.array, rng: random.PRNGKeyArray = None) -> State:
+        """
+        Warm start the Sinkhorn Step solver by compiling the step function.
+        This returns the initial state of the solver.
+        """
+        init_state = self.init_state(X_init, rng=rng)
+        self.step(self.init_state(X_init), 0)
+        return init_state
+
+    def iterations(self, init_state: State) -> State:
+        """JITable Sinkhorn Step outer loop.
 
         Args:
         X_init: Initial points of shape ``[batch, ndim]``.
@@ -272,53 +309,20 @@ class SinkhornStep:
             solver, _ = constants
             return solver.step(state, iteration)
 
-        state = fixed_point_loop.fixpoint_iter(
+        state = outer_loop(
             cond_fn=cond_fn,
             body_fn=body_fn,
             min_iterations=self.min_iterations,
             max_iterations=self.max_iterations,
             inner_iterations=1,
             constants=(self, None),
-            state=self.init_state(X_init)
+            state=init_state
         )
 
         return self.output_from_state(state)
 
     def output_from_state(self, state: SinkhornStepState) -> SinkhornStepState:
         return state
-
-    def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:
-        return ([self.objective_fn, self.linear_ot_solver, self.epsilon, self.ent_epsilon], {
-            "ent_relative_epsilon": self.ent_relative_epsilon,
-            "scale_cost": self.scale_cost,
-            "polytope_type": self.polytope_type,
-            "step_radius": self.step_radius,
-            "probe_radius": self.probe_radius,
-            "random_probe": self.random_probe,
-            "num_sphere_point": self.num_sphere_point,
-            "num_probe": self.num_probe,
-            "threshold": self.threshold,
-            "min_iterations": self.min_iterations,
-            "max_iterations": self.max_iterations,
-            "rank": self.rank,
-            "store_inner_errors": self.store_inner_errors,
-            "store_outer_evals": self.store_outer_evals,
-            "store_history": self.store_history,
-            **self._kwargs
-        })
-
-    @classmethod
-    def tree_unflatten(
-        cls, aux_data: Dict[str, Any], children: Sequence[Any]
-    ) -> "SinkhornStep":
-        objective_fn, linear_ot_solver, epsilon, ent_epsilon = children
-        return cls(
-            objective_fn=objective_fn,
-            linear_ot_solver=linear_ot_solver,
-            epsilon=epsilon,
-            ent_epsilon=ent_epsilon,
-            **aux_data
-        )
 
     def _converged(self, state: State, iteration: int) -> bool:
         dqsnorm, i, tol = state.displacement_sqnorms, iteration, self.threshold

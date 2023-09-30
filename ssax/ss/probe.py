@@ -6,25 +6,25 @@ from functools import partial
 from .utils import default_prng_key
 
 
-# @partial(jit, static_argnames='num_probe')
+@partial(jit, static_argnames=['num_probe'])
 def get_random_probe_points(origin: jnp.array, 
                             points: jnp.array, 
                             probe_radius: float = 2., 
                             num_probe: int = 5, 
                             rng=None) -> jnp.array:
     batch, num_points, dim = points.shape
-    alpha = random.uniform(default_prng_key(rng), shape=(batch, num_points, num_probe, 1), dtype=points.dtype)
+    alpha = random.uniform(default_prng_key(rng), shape=(batch, num_points, num_probe, 1))
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis]  # [batch, num_points, num_probe, dim]
     return probe_points
 
 
-# @partial(jit, static_argnames='num_probe')
+@jit
 def get_probe_points(origin: jnp.array, 
-                     points: jnp.array, 
-                     probe_radius: float = 2., 
-                     num_probe: int = 5) -> jnp.array:
-    alpha = jnp.linspace(0, 1, num_probe + 2, dtype=points.dtype)[jnp.newaxis, jnp.newaxis, 1:num_probe + 1, jnp.newaxis]
+                     points: jnp.array,
+                     probes: jnp.array,
+                     probe_radius: float = 2.) -> jnp.array:
+    alpha = probes[jnp.newaxis, jnp.newaxis, :, jnp.newaxis]
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis, :]  # [batch, num_points, num_probe, dim]
     return probe_points
@@ -44,7 +44,7 @@ def get_shifted_points(new_origins: jnp.array, points: jnp.array):
     return shifted_points
 
 
-# @partial(jit, static_argnames='num_probe')
+@partial(jit, static_argnames='num_probe')
 def get_projecting_points(X1: jnp.array, 
                           X2: jnp.array, 
                           probe_step_size: float, 
@@ -60,6 +60,6 @@ def get_projecting_points(X1: jnp.array,
     elif X2.ndim == 3:
         assert X2.shape[0] == X1.shape[0]
         X2 = X2[..., jnp.newaxis, :]
-    alpha = jnp.arange(1, num_probe + 1, dtype=X1.dtype)[jnp.newaxis, jnp.newaxis, :, jnp.newaxis] * probe_step_size
+    alpha = jnp.arange(1, num_probe + 1)[jnp.newaxis, jnp.newaxis, :, jnp.newaxis] * probe_step_size
     points = X1 + (X2 - X1) * alpha
     return points

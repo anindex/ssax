@@ -4,25 +4,21 @@ from typing import Any, Dict, Optional, Sequence, Tuple, List, Union
 import jax
 import jax.numpy as jnp
 from jax import random, jit
-
+from flax import struct
 from ott.tools.gaussian_mixture.gaussian import Gaussian
 
 from ssax.ss.utils import default_prng_key
 
 
 __all__ = [
-    "SSGaussianInitializer", "SSUniformInitializer"
+    "GaussianInitializer", "UniformInitializer"
 ]
 
 
-@jax.tree_util.register_pytree_node_class
-class SinkhornStepInitializer(abc.ABC):
+@struct.dataclass
+class Initializer(abc.ABC):
     """Base class for Sinkhorn Step initializers."""
-
-    def __init__(self, 
-                 rng: random.PRNGKeyArray = None,
-                 **kwargs: Any) -> None:
-        self.rng = default_prng_key(rng)
+    rng: random.PRNGKeyArray = None
 
     @abc.abstractmethod
     def init_points(self, num_points: int) -> jnp.array:
@@ -39,32 +35,27 @@ class SinkhornStepInitializer(abc.ABC):
     def __call__(self, num_points: int) -> jnp.array:
         return self.init_points(num_points)
 
-    def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:  
-        return [], {}
 
-    @classmethod
-    def tree_unflatten(  
-        cls, aux_data: Dict[str, Any], children: Sequence[Any]
-    ) -> "SinkhornStepInitializer":
-        return cls(*children, **aux_data)
-
-
-@jax.tree_util.register_pytree_node_class
-class SSGaussianInitializer(SinkhornStepInitializer):
+@struct.dataclass
+class GaussianInitializer(Initializer):
     """Gaussian Sinkhorn Step initializer."""
 
-    def __init__(self, 
-                 mean: List[float], 
-                 var: Union[List[float], float], 
-                 rng: random.PRNGKeyArray = None,
-                 **kwargs: Any) -> None:
-        self.mean = jnp.array(mean)
+    dist: Gaussian = None
+
+    @classmethod
+    def create(cls, 
+               mean: List[float], 
+               var: Union[List[float], float], 
+               rng: random.PRNGKeyArray = None,
+               **kwargs: Any) -> "GaussianInitializer":
+        mean = jnp.array(mean)
         if isinstance(var, float):
-            self.var = var * jnp.eye(self.mean.shape[0])
+            var = var * jnp.eye(mean.shape[0])
         else:
-            self.var = jnp.array(var)
-        self.dist = Gaussian.from_mean_and_cov(mean, var)
-        super().__init__(rng, **kwargs)
+            var = jnp.array(var)
+        rng = default_prng_key(rng)
+        dist = Gaussian.from_mean_and_cov(mean, var)
+        return cls(rng=rng, dist=dist, **kwargs)
 
     def init_points(self, 
                     num_points: int,
@@ -73,31 +64,23 @@ class SSGaussianInitializer(SinkhornStepInitializer):
             rng = self.rng
         return self.dist.sample(rng, num_points)
 
-    def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:  
-        return [
-            self.mean,
-            self.var
-        ], {}
 
-    @classmethod
-    def tree_unflatten(  
-        cls, aux_data: Dict[str, Any], children: Sequence[Any]
-    ) -> "SinkhornStepInitializer":
-        mean, var = children
-        return cls(mean, var, **aux_data)
-
-
-@jax.tree_util.register_pytree_node_class
-class SSUniformInitializer(SinkhornStepInitializer):
+@struct.dataclass
+class UniformInitializer(Initializer):
     """Uniform Sinkhorn Step initializer."""
 
-    def __init__(self, 
-                 bounds: List[Tuple[float, float]],  # [d, 2]
-                 rng: random.PRNGKeyArray = None,
-                 **kwargs: Any) -> None:
-        super().__init__(rng, **kwargs)
-        self.bounds = jnp.array(bounds)
-        self.dim = self.bounds.shape[0]
+    dim: int = None
+    bounds: jnp.array = None
+
+    @classmethod
+    def create(cls, 
+               bounds: List[Tuple[float, float]],  # [d, 2]
+               rng: random.PRNGKeyArray = None,
+               **kwargs: Any) -> "UniformInitializer":
+        bounds = jnp.array(bounds)
+        dim = bounds.shape[0]
+        rng = default_prng_key(rng)
+        return cls(rng=rng, dim=dim, bounds=bounds, **kwargs)
 
     def init_points(self, 
                     num_points: int,
@@ -106,15 +89,3 @@ class SSUniformInitializer(SinkhornStepInitializer):
             rng = self.rng
         samples = random.uniform(rng, shape=(num_points, self.dim), minval=self.bounds[:, 0], maxval=self.bounds[:, 1])
         return samples
-
-    def tree_flatten(self) -> Tuple[Sequence[Any], Dict[str, Any]]:  
-        return [
-            self.bounds
-        ], {}
-
-    @classmethod
-    def tree_unflatten(  
-        cls, aux_data: Dict[str, Any], children: Sequence[Any]
-    ) -> "SinkhornStepInitializer":
-        bounds = children
-        return cls(bounds, **aux_data)
