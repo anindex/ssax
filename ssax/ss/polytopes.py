@@ -1,5 +1,5 @@
 import jax
-from jax import jit, random
+from jax import jit, random, vmap
 import jax.numpy as jnp
 
 from itertools import product
@@ -7,7 +7,7 @@ from functools import partial
 from typing import Tuple
 
 from .probe import get_random_probe_points, get_probe_points
-from .rotation import get_random_maximal_torus_matrix
+from .rotation import get_random_uniform_rot_matrix
 from .utils import default_prng_key
 
 
@@ -60,8 +60,11 @@ def get_sampled_polytope_vertices(origin: jnp.array,
     batch, dim = origin.shape
     polytope_vertices = polytope_vertices[jnp.newaxis, ...].repeat(batch, axis=0)  # [batch, num_vertices, dim]
 
-    max_torus_mat = get_random_maximal_torus_matrix(origin, rng=rng)
-    polytope_vertices = polytope_vertices @ max_torus_mat
+    # batch split key
+    rng = default_prng_key(rng)
+    batch_rng = random.split(rng, batch)
+    uniform_rot_mat = vmap(get_random_uniform_rot_matrix, in_axes=(None, 0))(dim, batch_rng)  # [batch, dim, dim]
+    polytope_vertices = polytope_vertices @ uniform_rot_mat
     step_points = polytope_vertices * step_radius + origin[:, jnp.newaxis, ...]  # [batch, num_vertices, dim]
     probe_points = get_probe_points(origin, polytope_vertices, probes, probe_radius)  # [batch, num_vertices, num_probe, dim]
     return step_points, probe_points, polytope_vertices

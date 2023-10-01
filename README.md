@@ -2,6 +2,17 @@
 
 This `ssax` repository demonstrates the proof of concept for the Sinkhorn Step - a batch gradient-free optimizer for highly non-convex objectives in JAX. `ssax` is heavily inspired by the code structure of [OTT-JAX](https://github.com/ott-jax/ott) to utilize most of its linear solvers, enabling the users to easily switch between different solver flavors.
 
+<p float="middle">
+  <img src="demos/ss-al_100000.gif" width="33%" />
+  <img src="demos/ss-bk_100000.gif" width="33%" /> 
+  <img src="demos/ss-rb_100000.gif" width="33%" />
+</p>
+
+<p float="middle">
+  <img src="demos/ss-eh_100000.gif" width="33%" />
+  <img src="demos/ss-ht_100000.gif" width="33%" /> 
+  <img src="demos/ss-lv_100000.gif" width="33%" />
+</p>
 
 ## Paper Preprint
 
