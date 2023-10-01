@@ -44,8 +44,8 @@ class Ackley(ObjectiveFn):
             bounds: Custom bounds for the function specified as (lower, upper) pairs.
         """
         if bounds is None:
-            bounds = jnp.array([(-6., 6.) for _ in range(dim)])
-        optimizers = jnp.zeros(dim)
+            bounds = jnp.array([(-6., 6.)]).repeat(dim, axis=0)
+        optimizers = jnp.zeros((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
     def evaluate(self, X: jnp.array) -> jnp.array:

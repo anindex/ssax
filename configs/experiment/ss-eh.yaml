@@ -35,11 +35,11 @@ optimizer:
     # scale_cost: 'max_cost'
     # scale_cost: 1.0
     polytope_type: 'orthoplex'
-    step_radius: 10.
-    probe_radius: 15.
+    step_radius: 5.
+    probe_radius: 10.
     num_probe: 5
     min_iterations: 5
-    max_iterations: 100
+    max_iterations: 70
     threshold: 1e-3
 
-num_points: 10000
+num_points: 100000

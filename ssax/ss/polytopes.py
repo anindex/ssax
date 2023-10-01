@@ -47,7 +47,7 @@ def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp
     return points
 
 
-# @jit
+@jit
 def get_sampled_polytope_vertices(origin: jnp.array,
                                   probes: jnp.array,
                                   polytope_vertices: jnp.array, 

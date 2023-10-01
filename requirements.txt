@@ -1,17 +1,8 @@
 hydra-core
 numpy
 matplotlib
-scipy
 jax
-diffrax
 omegaconf
-seaborn
-POT
-pytest
-pandas
-wandb
-tqdm
 setuptools
-jaxopt
 flax
 ott-jax

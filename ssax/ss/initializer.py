@@ -1,9 +1,8 @@
 import abc
 from typing import Any, Dict, Optional, Sequence, Tuple, List, Union
 
-import jax
 import jax.numpy as jnp
-from jax import random, jit
+from jax import random
 from flax import struct
 from ott.tools.gaussian_mixture.gaussian import Gaussian
 

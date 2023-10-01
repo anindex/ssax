@@ -4,15 +4,14 @@ import jax
 from jax import jit, random
 import jax.numpy as jnp
 from flax import struct
-from functools import partial
+
 from ott.solvers.linear import sinkhorn, sinkhorn_lr
 from ott.problems.linear import linear_problem
 from ott.geometry.epsilon_scheduler import Epsilon
-from ott.math import fixed_point_loop
 
 from ssax.ss.costs import GenericCost
 from ssax.ss.utils import default_prng_key
-from ssax.ss.polytopes import POLYTOPE_MAP, get_sampled_polytope_vertices, get_sampled_points_on_sphere
+from ssax.ss.polytopes import POLYTOPE_MAP, get_sampled_polytope_vertices
 
 
 __all__ = ["SinkhornStepState", "SinkhornStep"]
@@ -135,22 +134,20 @@ class SinkhornStep():
         dim = objective_fn.dim
 
         # Sinkhorn Step params
-        use_polytope = polytope_type in POLYTOPE_MAP
         polytope_vertices = POLYTOPE_MAP[polytope_type](jnp.zeros((dim,)))
         probes = jnp.linspace(0, 1, num_probe + 2)[1:num_probe + 1]
-        if linear_ot_solver is None:
-            if is_low_rank:
-                if epsilon is None:
-                    # Use default entropic regularization in LRSinkhorn if None was passed
-                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=rank, **kwargs
-                    )
-                else:
-                    # If epsilon is passed, use it to replace the default LRSinkhorn value
-                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=rank, epsilon=epsilon, **kwargs
-                    )
-        else:  # NOTE: current implementation does not support low-rank solvers
+        if linear_ot_solver is None and is_low_rank:
+            if epsilon is None:
+                # Use default entropic regularization in LRSinkhorn if None was passed
+                linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                    rank=rank, **kwargs
+                )
+            else:
+                # If epsilon is passed, use it to replace the default LRSinkhorn value
+                linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                    rank=rank, epsilon=epsilon, **kwargs
+                )
+        else:
             linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
 
         # init uniform weights

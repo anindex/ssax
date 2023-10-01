@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from ssax.objectives import ObjectiveFn
 
 
-def plot_objective(objective_fn, ax=None, resolution=100):
+def plot_objective(objective_fn: ObjectiveFn, ax=None, resolution: int = 100):
     """ Plots the objective function in 2D """
     if ax is None:
         ax = plt.gca()

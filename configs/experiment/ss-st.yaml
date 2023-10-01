@@ -42,4 +42,4 @@ optimizer:
     max_iterations: 100
     threshold: 1e-3
 
-num_points: 10000
+num_points: 100000

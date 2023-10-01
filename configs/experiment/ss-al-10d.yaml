@@ -1,8 +1,8 @@
 defaults:
-  - task: Levy
+  - task: Ackley_10d
 
 # Task-specific configurations
-name: ss-lv
+name: ss-al-10d
 seed: 0
 
 # Hyper-parameters
@@ -10,7 +10,7 @@ seed: 0
 initializer:
   name: UniformInitializer
   kwargs:
-    bounds: [[-5.0, 5.0], [-5.0, 5.0]]
+    bounds: None  # use bounds from task
 
 linear_solver:
   name: Sinkhorn
@@ -24,22 +24,22 @@ linear_solver:
 epsilon_scheduler:
   name: LinearEpsilon
   kwargs:
-    target: 0.1
+    target: 0.3
     init: 1.0
     decay: 0.01
 
 optimizer:
   name: SinkhornStep
   kwargs:
-    ent_epsilon: 0.1
+    # ent_epsilon: None
     # scale_cost: 'max_cost'
     # scale_cost: 1.0
     polytope_type: 'orthoplex'
-    step_radius: 0.2
-    probe_radius: 0.3
+    step_radius: 0.5
+    probe_radius: 0.7
     num_probe: 5
-    min_iterations: 5
-    max_iterations: 100
+    min_iterations: 10
+    max_iterations: 150
     threshold: 1e-3
 
 num_points: 100000

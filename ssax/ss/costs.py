@@ -1,10 +1,7 @@
-import math
-from typing import Any, Callable, Literal, Optional, Tuple, Union
+from typing import Any, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-
-from ssax.ss.polytopes import POLYTOPE_NUM_VERTICES_MAP
 
 from ott.geometry import geometry
 
