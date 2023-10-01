@@ -17,7 +17,5 @@ setup(
     author="An T. Le",
     author_email="an@robot-learning.de",
     packages=setuptools.find_packages(),
-    install_requires=[
-        "wandb_plot @ git+https://github.com/danielpalen/wandb_plot.git",
-    ] + requires_list,
+    install_requires=requires_list,
 )

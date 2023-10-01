@@ -11,7 +11,7 @@ Simply activate your conda/Python environment and run
 pip install -e .
 ```
 
-Please install [JAX with CUDA support](https://github.com/google/jax#installation) if you want to run the code on GPU.
+Please install [JAX with CUDA support](https://github.com/google/jax#installation) if you want to run the code on GPU for more performance.
 
 ## Run some demos
 
