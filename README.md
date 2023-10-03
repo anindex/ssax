@@ -14,6 +14,8 @@ This `ssax` repository demonstrates the proof of concept for the Sinkhorn Step -
   <img src="demos/ss-lv_100000.gif" width="32%" />
 </p>
 
+**NOTE**: This repository implements the Sinkhorn Step optimizer (in JAX) as a general-purpose standalone solver for non-convex optimization problems. The MPOT trajectory optimizer using Sinkhorn Step (in PyTorch) will be released in a separate repository.
+
 ## Paper Preprint
 
 [<img src="https://img.shields.io/badge/arxiv-%23B31B1B.svg?&style=for-the-badge&logo=arxiv&logoColor=white" />](https://www.ias.informatik.tu-darmstadt.de/uploads/Team/AnThaiLe/mpot_preprint.pdf)
