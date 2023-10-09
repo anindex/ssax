@@ -51,7 +51,7 @@ and find result animations in the `logs/` folder. You can replace the tag `exper
 - `ss-ht`: Hoelder Table function in 2D
 - `ss-lv`: Levy function in 2D
 - `ss-rb`: Rosenbrock function in 2D
-- `ss-rg`: Rastrigin function in 10D
+- `ss-rg`: Rastrigin function in 2D
 - `ss-st`: Styblinski-Tang function in 2D
 
 **Note**: For tuning new settings, the most sensitive hyperparameters are `step_radius`, `probe_radius` and the `epsilon_scheduler` parameters. You can play around with these parameters together with the other hyperparameters with synthetic functions to get a feeling of how they affect the optimization.
