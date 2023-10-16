@@ -16,8 +16,9 @@ This `ssax` repository demonstrates the proof of concept for the Sinkhorn Step -
 
 ## Paper Preprint
 
-[<img src="https://img.shields.io/badge/arxiv-%23B31B1B.svg?&style=for-the-badge&logo=arxiv&logoColor=white" />](https://www.ias.informatik.tu-darmstadt.de/uploads/Team/AnThaiLe/mpot_preprint.pdf)
+This work has been accepted to NeurIPS 2023. Please find the pre-print here:
 
+[<img src="https://img.shields.io/badge/arxiv-%23B31B1B.svg?&style=for-the-badge&logo=arxiv&logoColor=white" />](https://www.ias.informatik.tu-darmstadt.de/uploads/Team/AnThaiLe/mpot_preprint.pdf)
 
 ## Installation
 
