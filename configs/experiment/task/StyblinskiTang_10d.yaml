@@ -1,0 +1,5 @@
+name: StyblinskiTang
+kwargs:
+  dim: 10
+  noise_std: 0.0
+  negate: False

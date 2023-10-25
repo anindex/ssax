@@ -1,0 +1,28 @@
+defaults:
+  - experiment: ss-st-cosin-sim
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+  # - override hydra/launcher: joblib
+  - _self_
+
+# wandb configs
+project: ss-gopt
+group: "${task.name}-${experiment.task.name}-num_points${experiment.num_points}"
+
+# Data loading and logging directories
+debug: False
+plotting: True
+save_video: True
+save_result: False
+gpu: False
+max_ram: 12
+data_dir: # If None, the repositories default data_dir is chosen
+logs_dir: ./logs/${experiment.name}/${now:%Y%m%d-%H%M%S}
+num_seeds: 50
+
+hydra:
+  run:
+    dir: ${logs_dir}
+  # launcher:
+  #   n_jobs: 1
+  #   backend: Loky

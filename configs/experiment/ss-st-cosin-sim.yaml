@@ -1,9 +1,8 @@
 defaults:
-  - task: Ackley_10d
+  - task: StyblinskiTang_10d
 
 # Task-specific configurations
-name: ss-al-10d
-seed: 0
+name: ss-st-cosin-sim
 
 # Hyper-parameters
 
@@ -21,25 +20,25 @@ linear_solver:
     max_iterations: 100
     initializer: 'default'
 
-epsilon_scheduler:
-  name: LinearEpsilon
-  kwargs:
-    target: 0.3
-    init: 1.0
-    decay: 0.01
+# epsilon_scheduler:
+#   name: LinearEpsilon
+#   kwargs:
+#     target: 0.1
+#     init: 1.0
+#     decay: 0.01
 
 optimizer:
   name: SinkhornStep
   kwargs:
-    # ent_epsilon: None
+    ent_epsilon: 0.5
     # scale_cost: 'max_cost'
     # scale_cost: 1.0
-    polytope_type: 'orthoplex'
-    step_radius: 0.5
-    probe_radius: 0.7
+    polytope_type: 'cube'
+    step_radius: 0.1
+    probe_radius: 0.1
     num_probe: 5
-    min_iterations: 10
-    max_iterations: 150
-    threshold: 1e-3
+    min_iterations: 80
+    max_iterations: 80
+    threshold: 5e-5
 
-num_points: 10000
+num_points: 1000

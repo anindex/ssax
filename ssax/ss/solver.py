@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, Callable
 
 import jax
-from jax import jit, random
+from jax import jit, random, grad, vmap, lax
 import jax.numpy as jnp
 from flax import struct
 
@@ -62,6 +62,9 @@ class SinkhornStepState():
         inner Sinkhorn iterations.
         sinkhorn_errors: Holds sequence of vectors of sinkhorn_errors of the Sinkhorn algorithm
         at each iteration.
+        objective_vals: Holds sequence of objective values at each iteration.
+        displacement_sqnorms: Holds sequence of mean displacement sqnorms at each iteration.
+        cosin_similarity: Holds sequence cosin_similarity compared to true gradients.
         X: optimizing points.
         a: weights of the barycenter. (not using)
     """
@@ -72,6 +75,7 @@ class SinkhornStepState():
     sinkhorn_errors: Optional[jnp.array] = None
     objective_vals: Optional[jnp.array] = None
     displacement_sqnorms: Optional[jnp.array] = None
+    cosin_similarity: Optional[jnp.array] = None
     X_history: Optional[jnp.array] = None
     a: Optional[jnp.array] = None
     rng: Optional[jax.random.PRNGKeyArray] = None
@@ -86,7 +90,7 @@ State = SinkhornStepState
 
 @struct.dataclass
 class SinkhornStep():
-    """Sinkhorn Step solver for problems that use a linear problem in inner loop."""
+    """Batch gradient-free solver for non-convex objectives."""
 
     objective_fn: Any = None
     dim: int = None
@@ -106,6 +110,7 @@ class SinkhornStep():
     store_inner_errors: bool = False
     store_outer_evals: bool = False
     store_history: bool = False
+    store_cosine_similarity: bool = False
 
     @classmethod
     def create(
@@ -128,6 +133,7 @@ class SinkhornStep():
         store_inner_errors: bool = False,
         store_outer_evals: bool = False,
         store_history: bool = False,
+        store_cosine_similarity: bool = False,
         **kwargs: Any,
     ) -> "SinkhornStep":
         is_low_rank = rank > 0
@@ -136,20 +142,20 @@ class SinkhornStep():
         # Sinkhorn Step params
         polytope_vertices = POLYTOPE_MAP[polytope_type](jnp.zeros((dim,)))
         probes = jnp.linspace(0, 1, num_probe + 2)[1:num_probe + 1]
-        if linear_ot_solver is None and is_low_rank:
-            if epsilon is None:
-                # Use default entropic regularization in LRSinkhorn if None was passed
-                linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                    rank=rank, **kwargs
-                )
+        if linear_ot_solver is None:
+            if is_low_rank:
+                if epsilon is None:
+                    # Use default entropic regularization in LRSinkhorn if None was passed
+                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                        rank=rank, **kwargs
+                    )
+                else:
+                    # If epsilon is passed, use it to replace the default LRSinkhorn value
+                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                        rank=rank, epsilon=epsilon, **kwargs
+                    )
             else:
-                # If epsilon is passed, use it to replace the default LRSinkhorn value
-                linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                    rank=rank, epsilon=epsilon, **kwargs
-                )
-        else:
-            linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
-
+                linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
         # init uniform weights
         # TODO: support non-uniform weights for conditional sinkhorn step
         # self.a = jnp.ones((num_points,)) / num_points
@@ -173,7 +179,7 @@ class SinkhornStep():
             store_inner_errors=store_inner_errors,
             store_outer_evals=store_outer_evals,
             store_history=store_history,
-            **kwargs
+            store_cosine_similarity=store_cosine_similarity
         )
 
     @property
@@ -203,12 +209,25 @@ class SinkhornStep():
         num_points, dim = X_init.shape
 
         num_iter = self.max_iterations
-        sinkhorn_errors = -jnp.ones((
-            num_iter,
-            self.linear_ot_solver.outer_iterations,
-        ))
-        objective_vals = -jnp.ones((num_iter, num_points))
-        X_history = jnp.zeros((num_iter, num_points, dim))
+        if self.store_inner_errors:
+            sinkhorn_errors = -jnp.ones((
+                num_iter,
+                self.linear_ot_solver.outer_iterations,
+            ))
+        else:
+            sinkhorn_errors = None
+        if self.store_outer_evals:
+            objective_vals = -jnp.ones((num_iter, num_points))
+        else:
+            objective_vals = None
+        if self.store_history:
+            X_history = jnp.zeros((num_iter, num_points, dim))
+        else:
+            X_history = None
+        if self.store_cosine_similarity:
+            cosin_similarity = -jnp.ones((num_iter, num_points))
+        else:
+            cosin_similarity = None
 
         # NOTE: uniform weights for now
         a = jnp.ones((num_points,)) / num_points
@@ -216,7 +235,9 @@ class SinkhornStep():
         return SinkhornStepState(
             costs=-jnp.ones((num_iter,)), X=X_init, linear_convergence=-jnp.ones((num_iter,)),
             sinkhorn_errors=sinkhorn_errors, objective_vals=objective_vals, 
-            displacement_sqnorms=-jnp.ones((num_iter,)), X_history=X_history, a=a,
+            displacement_sqnorms=-jnp.ones((num_iter,)), 
+            cosin_similarity=cosin_similarity,
+            X_history=X_history, a=a,
             rng=default_prng_key(rng)
         )
 
@@ -252,10 +273,28 @@ class SinkhornStep():
         updated_costs = state.costs.at[iteration].set(res.ent_reg_cost)
         linear_convergence = state.linear_convergence.at[iteration].set(res.converged)
 
-        # optimization statistics NOTE: comment those if not needed
-        sinkhorn_errors = state.sinkhorn_errors.at[iteration, :].set(res.errors)
-        objective_vals = state.objective_vals.at[iteration, :].set(self.objective_fn(X_new))
-        X_history = state.X_history.at[iteration, :, :].set(X_new)
+        # optimization statistics
+        if state.sinkhorn_errors is not None:
+            sinkhorn_errors = state.sinkhorn_errors.at[iteration, :].set(res.errors)
+        else: 
+            sinkhorn_errors = None
+        if state.objective_vals is not None:
+            objective_vals = state.objective_vals.at[iteration, :].set(self.objective_fn(X_new))
+        else:
+            objective_vals = None
+        if state.X_history is not None:
+            X_history = state.X_history.at[iteration, :, :].set(X_new)
+        else:
+            X_history = None
+        if state.cosin_similarity is not None:
+            grad_fn = grad(self.objective_fn)
+            true_grad = -vmap(grad_fn)(X_new)
+            ss_grad = X_new - X
+            true_grad_norm, ss_grad_norm = jnp.linalg.norm(true_grad, axis=-1), jnp.linalg.norm(ss_grad, axis=-1)
+            cosin = jnp.einsum('bi,bi->b', true_grad, ss_grad) / (true_grad_norm * ss_grad_norm)
+            cosin_similarity = state.cosin_similarity.at[iteration, :].set(cosin)
+        else:
+            cosin_similarity = None
 
         displacement_sqnorms = state.displacement_sqnorms.at[iteration].set(jnp.sum((X_new - X)**2, axis=-1).mean())
 
@@ -265,6 +304,7 @@ class SinkhornStep():
             sinkhorn_errors=sinkhorn_errors,
             objective_vals=objective_vals,
             displacement_sqnorms=displacement_sqnorms,
+            cosin_similarity=cosin_similarity,
             X=X_new,
             X_history=X_history,
             rng=rng,

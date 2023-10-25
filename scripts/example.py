@@ -69,6 +69,7 @@ if __name__ == '__main__':
         num_probe=5,
         min_iterations=5,
         max_iterations=100,
+        store_history=True,
         threshold=1e-3
     )
 

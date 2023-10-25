@@ -1,8 +1,8 @@
 defaults:
-  - task: Ackley_10d
+  - task: StyblinskiTang_10d
 
 # Task-specific configurations
-name: ss-al-10d
+name: ss-st
 seed: 0
 
 # Hyper-parameters
@@ -24,22 +24,22 @@ linear_solver:
 epsilon_scheduler:
   name: LinearEpsilon
   kwargs:
-    target: 0.3
+    target: 0.1
     init: 1.0
     decay: 0.01
 
 optimizer:
   name: SinkhornStep
   kwargs:
-    # ent_epsilon: None
+    ent_epsilon: 0.1
     # scale_cost: 'max_cost'
     # scale_cost: 1.0
     polytope_type: 'orthoplex'
-    step_radius: 0.5
-    probe_radius: 0.7
+    step_radius: 0.2
+    probe_radius: 0.2
     num_probe: 5
     min_iterations: 10
-    max_iterations: 150
-    threshold: 1e-3
+    max_iterations: 100
+    threshold: 5e-5
 
 num_points: 10000

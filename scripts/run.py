@@ -68,6 +68,8 @@ def main(cfg: DictConfig):
         objective_fn=task,
         linear_ot_solver=linear_ot_solver,
         epsilon=epsilon_scheduler,
+        store_outer_evals=True,
+        store_history=True,
         **cfg.experiment.optimizer.kwargs
     )
 
@@ -80,7 +82,6 @@ def main(cfg: DictConfig):
     tic = time.time()
     res = global_optimizer.iterations(init_state)
     toc = time.time()
-    print(f"Optimization time: {toc - tic:.2f} s")
 
     # NOTE: this is a hack getting converged iteration index
     cid = jnp.where(res.linear_convergence == -1)[0]
@@ -88,6 +89,7 @@ def main(cfg: DictConfig):
         converged_at = res.linear_convergence.shape[0]
     else:
         converged_at = cid.min()
+    print(f"Optimization time converged at {converged_at}! Time: {toc - tic:.2f}s")
 
     # Plotting
     if task.bounds is None:
@@ -125,18 +127,6 @@ def main(cfg: DictConfig):
         # Save figure
         fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.png")
         fig.savefig(fig_name, dpi=300)
-
-        sinkhorn_errors = res.sinkhorn_errors
-        plt.figure()
-        plt.plot(sinkhorn_errors)
-        plt.yscale('log')
-        plt.xlabel('Iterations')
-        plt.ylabel('Sinkhorn error')
-        plt.title(f"{cfg.experiment.name}")
-        plt.tight_layout()
-        # Save figure
-        fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}_sinkhorn_error.png")
-        plt.savefig(fig_name, dpi=300)
 
         objective_vals = res.objective_vals
         mean = objective_vals.mean(axis=-1)

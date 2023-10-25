@@ -42,7 +42,7 @@ For testing Sinkhorn Step with various synthetic functions, run the following sc
 python scripts/run.py experiment=ss-al
 ```
 
-and find result animations in the `logs/` folder. You can replace the tag `experiment=<exp-filename>` with filenames found in `configs/experiment` folder. The current available experiments are:
+and find result animations in the `logs/` folder. You can replace the tag `experiment=<exp-filename>` with filenames found in `configs/experiment` folder. The current available optimization experiments are:
 
 - `ss-al`: Ackley function in 2D
 - `ss-al-10d`: Ackley function in 10D
@@ -54,8 +54,19 @@ and find result animations in the `logs/` folder. You can replace the tag `exper
 - `ss-rb`: Rosenbrock function in 2D
 - `ss-rg`: Rastrigin function in 2D
 - `ss-st`: Styblinski-Tang function in 2D
+- `ss-st-10d`: Styblinski-Tang function in 10D
 
-**Note**: For tuning new settings, the most sensitive hyperparameters are `step_radius`, `probe_radius` and the `epsilon_scheduler` parameters. You can play around with these parameters together with the other hyperparameters with synthetic functions to get a feeling of how they affect the optimization.
+**Note**: For tuning new settings, the most sensitive hyperparameters are `step_radius`, `probe_radius`, entropic regularization scalar `ent_epsilon` and the step-annealing scheme `epsilon_scheduler` parameters. You can play around with these parameters together with the other hyperparameters with synthetic functions to get a feeling of how they affect the optimization. For the 10D experiments, the plots are projected to the first 2 dimensions for visualization.
+
+We also add some benchmarks on gradient approximation experiments based on cosine similarity between the Sinkhorn Step and the true gradient, over outer iterations and over entropic regularization on the Sinkhorn distance. We turn off step annealing for benchmarking purpose. The current available gradient approximation experiments are:
+
+- `ss-al-cosin-sim`: Ackley function in 10D
+- `ss-st-cosin-sim`: Styblinski-Tang function in 10D
+
+To run them:
+```azure
+python scripts/benchmark_cosin_similarity_single.py experiment=ss-st-cosin-sim num_seeds=20
+```
 
 ## Citation
 
