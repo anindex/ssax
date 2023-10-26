@@ -83,4 +83,5 @@ If you found this work useful, please consider citing this reference:
 
 ## See also
 
-The [OTT-JAX documentation](https://ott-jax.readthedocs.io/en/latest/) for more details on the linear solvers.
+- The [OTT-JAX documentation](https://ott-jax.readthedocs.io/en/latest/) for more details on the linear solvers.
+- [This wonderful library](http://www.sfu.ca/~ssurjano/optimization.html) of synthetic test functions from Sonja & Derek (SFU). 
