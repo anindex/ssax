@@ -316,8 +316,7 @@ class SinkhornStep():
         This returns the initial state of the solver.
         """
         init_state = self.init_state(X_init, rng=rng)
-        self.step(self.init_state(X_init), 0)
-        return init_state
+        return self.step(init_state, 0)
 
     def iterations(self, init_state: State) -> State:
         """JITable Sinkhorn Step outer loop.

@@ -24,6 +24,8 @@ from ssax.objectives.visualization import plot_objective
 
 
 if __name__ == '__main__':
-    plt.figure()
-    plot_objective(Ackley.create(), resolution=200)
+    fig = plt.figure()
+    plot_objective(StyblinskiTang.create(), resolution=200)
+    plt.axis('off')
+    fig.tight_layout()
     plt.show()

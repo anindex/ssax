@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 plt.rcParams.update({
     "text.usetex": True,
     "font.family": "serif",
-    'font.size': 20,
+    'font.size': 24,
     "figure.figsize": (10, 8)
 })
 plt.style.use('ggplot')
