@@ -1,6 +1,7 @@
 import abc
 from typing import Any, Dict, Optional, Sequence, Tuple, List, Union
 
+import jax
 import jax.numpy as jnp
 from jax import random
 from flax import struct
@@ -17,10 +18,10 @@ __all__ = [
 @struct.dataclass
 class Initializer(abc.ABC):
     """Base class for Sinkhorn Step initializers."""
-    rng: random.PRNGKeyArray = None
+    rng: jax.Array = None
 
     @abc.abstractmethod
-    def init_points(self, num_points: int) -> jnp.array:
+    def init_points(self, num_points: int) -> jax.Array:
         """Initialize points for Sinkhorn Step.
 
         Args:
@@ -31,7 +32,7 @@ class Initializer(abc.ABC):
         """
         pass
 
-    def __call__(self, num_points: int) -> jnp.array:
+    def __call__(self, num_points: int) -> jax.Array:
         return self.init_points(num_points)
 
 
@@ -45,7 +46,7 @@ class GaussianInitializer(Initializer):
     def create(cls, 
                mean: List[float], 
                var: Union[List[float], float], 
-               rng: random.PRNGKeyArray = None,
+               rng: jax.Array = None,
                **kwargs: Any) -> "GaussianInitializer":
         mean = jnp.array(mean)
         if isinstance(var, float):
@@ -58,7 +59,7 @@ class GaussianInitializer(Initializer):
 
     def init_points(self, 
                     num_points: int,
-                    rng: Optional[random.PRNGKeyArray] = None) -> jnp.array:
+                    rng: Optional[jax.Array] = None) -> jax.Array:
         if rng is None:
             rng = self.rng
         return self.dist.sample(rng, num_points)
@@ -69,12 +70,12 @@ class UniformInitializer(Initializer):
     """Uniform Sinkhorn Step initializer."""
 
     dim: int = None
-    bounds: jnp.array = None
+    bounds: jax.Array = None
 
     @classmethod
     def create(cls, 
                bounds: List[Tuple[float, float]],  # [d, 2]
-               rng: random.PRNGKeyArray = None,
+               rng: jax.Array = None,
                **kwargs: Any) -> "UniformInitializer":
         bounds = jnp.array(bounds)
         dim = bounds.shape[0]
@@ -83,7 +84,7 @@ class UniformInitializer(Initializer):
 
     def init_points(self, 
                     num_points: int,
-                    rng: Optional[random.PRNGKeyArray] = None) -> jnp.array:
+                    rng: Optional[jax.Array] = None) -> jax.Array:
         if rng is None:
             rng = self.rng
         samples = random.uniform(rng, shape=(num_points, self.dim), minval=self.bounds[:, 0], maxval=self.bounds[:, 1])

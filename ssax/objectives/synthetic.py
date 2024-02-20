@@ -33,7 +33,7 @@ class Ackley(ObjectiveFn):
         dim: int = 2,
         noise_std: Optional[float] = None,
         negate: bool = False,
-        bounds: jnp.array = None,
+        bounds: jax.Array = None,
         **kwargs: Any
     ) -> 'Ackley':
         r"""
@@ -48,7 +48,7 @@ class Ackley(ObjectiveFn):
         optimizers = jnp.zeros((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         a, b, c = self.a, self.b, self.c
         part1 = -a * jnp.exp(-b / jnp.sqrt(self.dim) * jnp.linalg.norm(X, axis=-1))
         part2 = -(jnp.exp(jnp.mean(jnp.cos(c * X), axis=-1)))
@@ -60,19 +60,19 @@ class Beale(ObjectiveFn):
 
     dim: int = 2
     optimal_value: float = 0.0
-    optimizers: jnp.array = jnp.array([(3.0, 0.5)])
+    optimizers: jax.Array = jnp.array([(3.0, 0.5)])
 
     @classmethod
     def create(cls, 
                noise_std: Optional[float] = None,
                negate: bool = False,
-               bounds: jnp.array = None,
+               bounds: jax.Array = None,
                **kwargs: Any):
         if bounds is None:
             bounds = jnp.array([(-4.5, 4.5), (-4.5, 4.5)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         x1, x2 = X[..., 0], X[..., 1]
         part1 = (1.5 - x1 + x1 * x2) ** 2
         part2 = (2.25 - x1 + x1 * x2**2) ** 2
@@ -85,19 +85,19 @@ class Branin(ObjectiveFn):
 
     dim: int = 2
     optimal_value: float = 0.397887
-    optimizers: jnp.array = jnp.array([(-jnp.pi, 12.275), (jnp.pi, 2.275), (9.42478, 2.475)])
+    optimizers: jax.Array = jnp.array([(-jnp.pi, 12.275), (jnp.pi, 2.275), (9.42478, 2.475)])
 
     @classmethod
     def create(cls, 
                noise_std: Optional[float] = None,
                negate: bool = False,
-               bounds: jnp.array = None,
+               bounds: jax.Array = None,
                **kwargs: Any):
         if bounds is None:
             bounds = jnp.array([(-5.0, 10.0), (0.0, 15.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         t1 = (
             X[..., 1]
             - 5.1 / (4 * jnp.pi**2) * X[..., 0] ** 2
@@ -125,7 +125,7 @@ class Bukin(ObjectiveFn):
             bounds = jnp.array([(-15.0, -5.0), (-3.0, 3.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         part1 = 100.0 * jnp.sqrt(jnp.abs(X[..., 1] - 0.01 * X[..., 0] ** 2))
         part2 = 0.01 * jnp.abs(X[..., 0] + 10.0)
         return part1 + part2
@@ -148,7 +148,7 @@ class Cosine8(ObjectiveFn):
             bounds = jnp.array([(-1.0, 1.0)]).repeat(8, axis=0)
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         return jnp.sum(0.1 * jnp.cos(5 * jnp.pi * X) - jnp.power(X, 2), axis=-1)
 
 
@@ -169,7 +169,7 @@ class DropWave(ObjectiveFn):
             bounds = jnp.array([(-5.12, 5.12), (-5.12, 5.12)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         norm = jnp.linalg.norm(X, axis=-1) 
         part1 = 1.0 + jnp.cos(12.0 * norm)
         part2 = 0.5 * jnp.power(norm, 2) + 2.0
@@ -193,7 +193,7 @@ class EggHolder(ObjectiveFn):
             bounds = jnp.array([(-512.0, 512.0), (-512.0, 512.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         x1, x2 = X[..., 0], X[..., 1]
         part1 = -(x2 + 47.0) * jnp.sin(jnp.sqrt(jnp.abs(x2 + x1 / 2.0 + 47.0)))
         part2 = -x1 * jnp.sin(jnp.sqrt(jnp.abs(x1 - (x2 + 47.0))))
@@ -222,7 +222,7 @@ class HolderTable(ObjectiveFn):
             bounds = jnp.array([(-10.0, 10.0), (-10.0, 10.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         term = jnp.abs(1 - jnp.linalg.norm(X, axis=-1) / jnp.pi)
         return -(
             jnp.abs(jnp.sin(X[..., 0]) * jnp.cos(X[..., 1]) * jnp.exp(term))
@@ -246,7 +246,7 @@ class SixHumpCamel(ObjectiveFn):
             bounds = jnp.array([(-3.0, 3.0), (-2.0, 2.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         x1, x2 = X[..., 0], X[..., 1]
         return (
             (4 - 2.1 * x1**2 + x1**4 / 3) * x1**2
@@ -272,7 +272,7 @@ class ThreeHumpCamel(ObjectiveFn):
             bounds = jnp.array([(-5.0, 5.0), (-5.0, 5.0)])
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         x1, x2 = X[..., 0], X[..., 1]
         return 2.0 * x1**2 - 1.05 * x1**4 + x1**6 / 6.0 + x1 * x2 + x2**2
 
@@ -300,7 +300,7 @@ class DixonPrice(ObjectiveFn):
         ])
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         part1 = jnp.power(X[..., 0] - 1, 2)
         i = jnp.arange(2, self.dim + 1)
         part2 = jnp.sum(i * jnp.power(2.0 * jnp.power(X[..., 1:], 2) - X[..., :-1], 2), axis=-1)
@@ -325,7 +325,7 @@ class Griewank(ObjectiveFn):
         optimizers = jnp.zeros((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         part1 = jnp.sum(X**2 / 4000.0, axis=-1)
         i = jnp.arange(1, self.dim + 1)
         part2 = -(jnp.prod(jnp.cos(X / jnp.sqrt(i)), axis=-1))
@@ -350,7 +350,7 @@ class Levy(ObjectiveFn):
         optimizers = jnp.ones((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         w = 1.0 + (X - 1.0) / 4.0
         part1 = jnp.sin(jnp.pi * w[..., 0]) ** 2
         part2 = jnp.sum(
@@ -382,7 +382,7 @@ class Michalewicz(ObjectiveFn):
             bounds = jnp.array([(0.0, jnp.pi)]).repeat(cls.dim, axis=0)
         return cls(noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         m = 10
         i = jnp.arange(1, self.dim + 1)
         return -(
@@ -410,7 +410,7 @@ class Powell(ObjectiveFn):
         optimizers = jnp.zeros((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         result = jnp.zeros_like(X[..., 0])
         for i in range(self.dim // 4):
             i_ = i + 1
@@ -440,7 +440,7 @@ class Rastrigin(ObjectiveFn):
         optimizers = jnp.zeros((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         return 10.0 * self.dim + jnp.sum(
             X**2 - 10.0 * jnp.cos(2.0 * jnp.pi * X), axis=-1
         )
@@ -464,7 +464,7 @@ class Rosenbrock(ObjectiveFn):
         optimizers = jnp.ones((1, dim))
         return cls(dim=dim, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         return jnp.sum(
             100.0 * (X[..., 1:] - X[..., :-1] ** 2) ** 2 + (X[..., :-1] - 1) ** 2,
             axis=-1,
@@ -488,5 +488,5 @@ class StyblinskiTang(ObjectiveFn):
         optimal_value = -39.166166 * dim
         return cls(dim=dim, optimal_value=optimal_value, optimizers=optimizers, noise_std=noise_std, negate=negate, bounds=bounds, **kwargs)
 
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         return 0.5 * (X**4 - 16 * X**2 + 5 * X).sum(axis=-1)

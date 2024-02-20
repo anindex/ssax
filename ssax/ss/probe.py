@@ -1,3 +1,4 @@
+import jax
 from jax import jit, random
 import jax.numpy as jnp
 
@@ -7,11 +8,11 @@ from .utils import default_prng_key
 
 
 @partial(jit, static_argnames=['num_probe'])
-def get_random_probe_points(origin: jnp.array, 
-                            points: jnp.array, 
+def get_random_probe_points(origin: jax.Array, 
+                            points: jax.Array, 
                             probe_radius: float = 2., 
                             num_probe: int = 5, 
-                            rng=None) -> jnp.array:
+                            rng: jax.Array = None) -> jax.Array:
     batch, num_points, dim = points.shape
     alpha = random.uniform(default_prng_key(rng), shape=(batch, num_points, num_probe, 1))
     probe_points = points * probe_radius
@@ -20,10 +21,10 @@ def get_random_probe_points(origin: jnp.array,
 
 
 @jit
-def get_probe_points(origin: jnp.array, 
-                     points: jnp.array,
-                     probes: jnp.array,
-                     probe_radius: float = 2.) -> jnp.array:
+def get_probe_points(origin: jax.Array, 
+                     points: jax.Array,
+                     probes: jax.Array,
+                     probe_radius: float = 2.) -> jax.Array:
     alpha = probes[jnp.newaxis, jnp.newaxis, :, jnp.newaxis]
     probe_points = points * probe_radius
     probe_points = probe_points[..., jnp.newaxis, :] * alpha  + origin[..., jnp.newaxis, jnp.newaxis, :]  # [batch, num_points, num_probe, dim]
@@ -31,7 +32,7 @@ def get_probe_points(origin: jnp.array,
 
 
 @jit
-def get_shifted_points(new_origins: jnp.array, points: jnp.array):
+def get_shifted_points(new_origins: jax.Array, points: jax.Array):
     '''
     Args:
         new_origins: [no, dim]
@@ -45,10 +46,10 @@ def get_shifted_points(new_origins: jnp.array, points: jnp.array):
 
 
 @partial(jit, static_argnames='num_probe')
-def get_projecting_points(X1: jnp.array, 
-                          X2: jnp.array, 
+def get_projecting_points(X1: jax.Array, 
+                          X2: jax.Array, 
                           probe_step_size: float, 
-                          num_probe: int = 5) -> jnp.array:
+                          num_probe: int = 5) -> jax.Array:
     '''
     X1: [nb1 x dim]
     X2: [nb2 x dim] or [nb1 x nb2 x dim]

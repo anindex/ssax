@@ -1,7 +1,7 @@
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, Callable
 
 import jax
-from jax import jit, random, grad, vmap, lax
+from jax import jit, random, grad, vmap
 import jax.numpy as jnp
 from flax import struct
 
@@ -69,16 +69,16 @@ class SinkhornStepState():
         a: weights of the barycenter. (not using)
     """
 
-    costs: jnp.array = None
-    X: jnp.array = None
-    linear_convergence: Optional[jnp.array] = None
-    sinkhorn_errors: Optional[jnp.array] = None
-    objective_vals: Optional[jnp.array] = None
-    displacement_sqnorms: Optional[jnp.array] = None
-    cosin_similarity: Optional[jnp.array] = None
-    X_history: Optional[jnp.array] = None
-    a: Optional[jnp.array] = None
-    rng: Optional[jax.random.PRNGKeyArray] = None
+    costs: jax.Array = None
+    X: jax.Array = None
+    linear_convergence: Optional[jax.Array] = None
+    sinkhorn_errors: Optional[jax.Array] = None
+    objective_vals: Optional[jax.Array] = None
+    displacement_sqnorms: Optional[jax.Array] = None
+    cosin_similarity: Optional[jax.Array] = None
+    X_history: Optional[jax.Array] = None
+    a: Optional[jax.Array] = None
+    rng: Optional[jax.Array] = None
 
     def set(self, **kwargs: Any) -> "SinkhornStepState":
         """Return a copy of self, possibly with overwrites."""
@@ -94,7 +94,7 @@ class SinkhornStep():
 
     objective_fn: Any = None
     dim: int = None
-    polytope_vertices: jnp.array = None
+    polytope_vertices: jax.Array = None
     linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = None
     epsilon: Union[Epsilon, float] = 0.1
     ent_epsilon: Union[Epsilon, float] = None
@@ -102,7 +102,7 @@ class SinkhornStep():
     scale_cost: float = 1.0
     step_radius: float = 1.
     probe_radius: float = 2.
-    probes: jnp.array = None
+    probes: jax.Array = None
     rank: int = -1
     min_iterations: int = 5
     max_iterations: int = 50
@@ -189,8 +189,8 @@ class SinkhornStep():
 
     def init_state(
         self,
-        X_init: jnp.array,
-        rng: Optional[jax.random.PRNGKeyArray] = None,
+        X_init: jax.Array,
+        rng: Optional[jax.Array] = None,
     ) -> SinkhornStepState:
         """Initialize the state of the Wasserstein barycenter iterations.
 
@@ -310,7 +310,7 @@ class SinkhornStep():
             rng=rng,
         )
 
-    def warm_start(self, X_init: jnp.array, rng: random.PRNGKeyArray = None) -> State:
+    def warm_start(self, X_init: jax.Array, rng: jax.Array = None) -> State:
         """
         Warm start the Sinkhorn Step solver by compiling the step function.
         This returns the initial state of the solver.

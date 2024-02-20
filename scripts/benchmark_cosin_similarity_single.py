@@ -5,7 +5,6 @@ import hydra
 import numpy as np
 from matplotlib import pyplot as plt
 plt.rcParams.update({
-    "text.usetex": True,
     "font.family": "serif",
     'font.size': 16,
     "figure.figsize": (10, 8)
@@ -116,7 +115,7 @@ def main(cfg: DictConfig):
             converged_at = res.linear_convergence.shape[0]
         else:
             converged_at = cid.min()
-        print(f"Optimization time converged at {converged_at}! Time: {toc - tic:.2f}s")
+        print(f"Optimization converged at {converged_at}! Time: {toc - tic:.2f}s")
         cosin_similarity = res.cosin_similarity[:converged_at]
         # remove NaN values from fix points convergences
         if cosin_sim_list is not None:

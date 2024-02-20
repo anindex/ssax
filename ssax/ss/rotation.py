@@ -9,7 +9,7 @@ from ssax.ss.utils import default_prng_key
 
 
 @jit
-def rotation_matrix(theta: jnp.array) -> jnp.array:
+def rotation_matrix(theta: jax.Array) -> jax.Array:
     theta = theta[..., jnp.newaxis, jnp.newaxis]
     dim1 = jnp.concatenate([jnp.cos(theta), -jnp.sin(theta)], axis=-2)
     dim2 = jnp.concatenate([jnp.sin(theta), jnp.cos(theta)], axis=-2)
@@ -18,10 +18,10 @@ def rotation_matrix(theta: jnp.array) -> jnp.array:
 
 
 @jit
-def get_random_maximal_torus_matrix(origin: jnp.array, 
+def get_random_maximal_torus_matrix(origin: jax.Array, 
                                     angle_range=[0, 2 * jnp.pi],
                                     rng: Any = None,
-                                    **kwargs) -> jnp.array:
+                                    **kwargs) -> jax.Array:
     # NOTE: this does not work for odd dim.
     # NOTE: this function does not draw a uniform random rotation matrix on SO(dim). But it still works in practice.
     batch, dim = origin.shape
@@ -37,7 +37,7 @@ def get_random_maximal_torus_matrix(origin: jnp.array,
 @partial(jit, static_argnames='dim')
 def get_random_uniform_rot_matrix(dim: int,
                                   rng: Any = None,
-                                  **kwargs) -> jnp.array:
+                                  **kwargs) -> jax.Array:
     """Compute a uniformly random rotation matrix drawn from the Haar distribution
     (the only uniform distribution on SO(n)).
     See: Stewart, G.W., "The efficient generation of random orthogonal

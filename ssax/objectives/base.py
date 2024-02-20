@@ -13,13 +13,13 @@ class ObjectiveFn(abc.ABC):
 
     dim: int = None
     optimal_value: float = None
-    optimizers: Optional[jnp.array] = None
+    optimizers: Optional[jax.Array] = None
     noise_std: Optional[float] = None
     negate: bool = False
-    bounds: jnp.array = None
+    bounds: jax.Array = None
 
     @abc.abstractmethod
-    def evaluate(self, X: jnp.array) -> jnp.array:
+    def evaluate(self, X: jax.Array) -> jax.Array:
         """Compute cost
 
         Args:
@@ -29,6 +29,6 @@ class ObjectiveFn(abc.ABC):
           The cost array.
         """
 
-    def __call__(self, X: jnp.array) -> jnp.array:
+    def __call__(self, X: jax.Array) -> jax.Array:
         cost = self.evaluate(X)
         return cost

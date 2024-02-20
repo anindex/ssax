@@ -12,9 +12,9 @@ from .utils import default_prng_key
 
 
 @jit
-def get_cube_vertices(origin: jnp.array, 
+def get_cube_vertices(origin: jax.Array, 
                       radius: float = 1., 
-                      **kwargs) -> jnp.array:
+                      **kwargs) -> jax.Array:
     dim = origin.shape[-1]
     points = jnp.array(list(product([1, -1], repeat=dim)), dtype=origin.dtype) / jnp.sqrt(dim)
     points = points * radius + origin
@@ -22,9 +22,9 @@ def get_cube_vertices(origin: jnp.array,
 
 
 @jit
-def get_orthoplex_vertices(origin: jnp.array, 
+def get_orthoplex_vertices(origin: jax.Array, 
                            radius: float = 1., 
-                           **kwargs) -> jnp.array:
+                           **kwargs) -> jax.Array:
     dim = origin.shape[-1]
     points = jnp.zeros((2 * dim, dim), dtype=origin.dtype)
     first = jnp.arange(0, dim)
@@ -36,7 +36,7 @@ def get_orthoplex_vertices(origin: jnp.array,
 
 
 @jit
-def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp.array:
+def get_simplex_vertices(origin: jax.Array, radius: float = 1., **kwargs) -> jax.Array:
     '''
     Simplex coordinates: https://en.wikipedia.org/wiki/Simplex#Cartesian_coordinates_for_a_regular_n-dimensional_simplex_in_Rn
     '''
@@ -48,13 +48,13 @@ def get_simplex_vertices(origin: jnp.array, radius: float = 1., **kwargs) -> jnp
 
 
 @jit
-def get_sampled_polytope_vertices(origin: jnp.array,
-                                  probes: jnp.array,
-                                  polytope_vertices: jnp.array, 
+def get_sampled_polytope_vertices(origin: jax.Array,
+                                  probes: jax.Array,
+                                  polytope_vertices: jax.Array, 
                                   step_radius: float = 1., 
                                   probe_radius: float = 2.,
-                                  rng: jax.random.PRNGKey = None,
-                                  **kwargs) -> Tuple[jnp.array]:
+                                  rng: jax.Array = None,
+                                  **kwargs) -> Tuple[jax.Array]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, ...]
     batch, dim = origin.shape
@@ -70,13 +70,13 @@ def get_sampled_polytope_vertices(origin: jnp.array,
     return step_points, probe_points, polytope_vertices
 
 
-def get_sampled_points_on_sphere(origin: jnp.array,
+def get_sampled_points_on_sphere(origin: jax.Array,
                                  step_radius: float = 1., 
                                  probe_radius: float = 2., 
                                  num_probe: int = 5, 
                                  num_sphere_point: int = 50,
-                                 rng: jax.random.PRNGKey = None,
-                                 **kwargs) -> Tuple[jnp.array]:
+                                 rng: jax.Array = None,
+                                 **kwargs) -> Tuple[jax.Array]:
     if origin.ndim == 1:
         origin = origin[jnp.newaxis, :]
     batch, dim = origin.shape

@@ -5,7 +5,6 @@ import hydra
 import numpy as np
 from matplotlib import pyplot as plt
 plt.rcParams.update({
-    "text.usetex": True,
     "font.family": "serif",
     'font.size': 24,
     "figure.figsize": (10, 8)
@@ -100,7 +99,7 @@ def main(cfg: DictConfig):
                     converged_at = res.linear_convergence.shape[0]
                 else:
                     converged_at = cid.min()
-                print(f"Optimization time converged at {converged_at}! Time: {toc - tic:.2f}s")
+                print(f"Optimization converged at {converged_at}! Time: {toc - tic:.2f}s")
                 cosin_similarity = res.cosin_similarity[:converged_at]
                 # remove NaN values from fix points convergences
                 if current_cs_list is not None:
@@ -119,7 +118,7 @@ def main(cfg: DictConfig):
             for i, cs_list in enumerate(polytope_cs_list):
                 mean_cs = np.array([cs.mean() for cs in cs_list])
                 std_cs = np.array([cs.std() for cs in cs_list])
-                ax[idx].plot(mean_cs, label=rf"$\lambda$={ent_eps[i]:.3f}")
+                ax[idx].plot(mean_cs, label=rf"λ={ent_eps[i]:.3f}")
                 ax[idx].fill_between(
                     np.arange(mean_cs.shape[0]),
                     mean_cs - std_cs,
