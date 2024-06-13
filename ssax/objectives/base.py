@@ -11,12 +11,12 @@ from flax import struct
 class ObjectiveFn(abc.ABC):
     """Base class for all costs."""
 
-    dim: int = None
+    dim: int = struct.field(default=2, pytree_node=False)
     optimal_value: float = None
     optimizers: Optional[jax.Array] = None
     noise_std: Optional[float] = None
     negate: bool = False
-    bounds: jax.Array = None
+    bounds: jax.Array = struct.field(default=None, pytree_node=False)
 
     @abc.abstractmethod
     def evaluate(self, X: jax.Array) -> jax.Array:

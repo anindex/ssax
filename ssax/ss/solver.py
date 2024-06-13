@@ -92,25 +92,25 @@ State = SinkhornStepState
 class SinkhornStep():
     """Batch gradient-free solver for non-convex objectives."""
 
-    objective_fn: Any = None
-    dim: int = None
-    polytope_vertices: jax.Array = None
-    linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = None
-    epsilon: Union[Epsilon, float] = 0.1
-    ent_epsilon: Union[Epsilon, float] = None
-    ent_relative_epsilon: bool = False
-    scale_cost: float = 1.0
-    step_radius: float = 1.
-    probe_radius: float = 2.
-    probes: jax.Array = None
-    rank: int = -1
-    min_iterations: int = 5
-    max_iterations: int = 50
-    threshold: float = 1e-3
-    store_inner_errors: bool = False
-    store_outer_evals: bool = False
-    store_history: bool = False
-    store_cosine_similarity: bool = False
+    objective_fn: Any = struct.field(default=None, pytree_node=False)
+    dim: int = struct.field(default=2, pytree_node=False)
+    polytope_vertices: jax.Array = struct.field(default=None, pytree_node=False)
+    linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = struct.field(default=None, pytree_node=False)
+    epsilon: Union[Epsilon, float] = struct.field(default=0.1, pytree_node=False)
+    ent_epsilon: Union[Epsilon, float] = struct.field(default=None, pytree_node=False)
+    ent_relative_epsilon: bool = struct.field(default=False, pytree_node=False)
+    scale_cost: float = struct.field(default=1., pytree_node=False)
+    step_radius: float = struct.field(default=1., pytree_node=False)
+    probe_radius: float = struct.field(default=2., pytree_node=False)
+    probes: jax.Array = struct.field(default=None, pytree_node=False)
+    rank: int = struct.field(default=-1, pytree_node=False)
+    min_iterations: int = struct.field(default=5, pytree_node=False)
+    max_iterations: int = struct.field(default=50, pytree_node=False)
+    threshold: float = struct.field(default=1e-3, pytree_node=False)
+    store_inner_errors: bool = struct.field(default=False, pytree_node=False)
+    store_outer_evals: bool = struct.field(default=False, pytree_node=False)
+    store_history: bool = struct.field(default=False, pytree_node=False)
+    store_cosine_similarity: bool = struct.field(default=False, pytree_node=False)
 
     @classmethod
     def create(

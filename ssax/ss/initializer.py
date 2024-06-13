@@ -69,7 +69,7 @@ class GaussianInitializer(Initializer):
 class UniformInitializer(Initializer):
     """Uniform Sinkhorn Step initializer."""
 
-    dim: int = None
+    dim: int = struct.field(default=2, pytree_node=False)
     bounds: jax.Array = None
 
     @classmethod
