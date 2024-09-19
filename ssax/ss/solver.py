@@ -92,7 +92,7 @@ State = SinkhornStepState
 class SinkhornStep():
     """Batch gradient-free solver for non-convex objectives."""
 
-    objective_fn: Any = struct.field(default=None, pytree_node=False)
+    objective_fn: Any = struct.field(default=None, pytree_node=True)
     dim: int = struct.field(default=2, pytree_node=False)
     polytope_vertices: jax.Array = struct.field(default=None, pytree_node=False)
     linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = struct.field(default=None, pytree_node=False)
