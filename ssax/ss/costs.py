@@ -36,6 +36,10 @@ class GenericCost(geometry.Geometry):
         return jnp.exp(-self.cost_matrix / self.epsilon)
 
     @property
+    def dtype(self) -> jnp.dtype:
+        self._cost_matrix.dtype if self._cost_matrix is not None else jnp.float32
+
+    @property
     def shape(self) -> Tuple[int, int]:
         # in the process of flattening/unflattening in vmap, `__init__`
         # can be called with dummy objects

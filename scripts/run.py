@@ -35,12 +35,6 @@ def main(cfg: DictConfig):
         logs_dir = os.path.join(ssax.LOGS_DIR, cfg.experiment.name, time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(logs_dir, exist_ok=True)
 
-    if cfg.gpu:
-        os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-    else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=16"
-
     seed = cfg.experiment.seed
     rng = jax.random.PRNGKey(seed)
 
