@@ -19,7 +19,6 @@ linear_solver:
     inner_iterations: 1
     min_iterations: 1
     max_iterations: 100
-    initializer: 'default'
 
 epsilon_scheduler:
   name: LinearEpsilon

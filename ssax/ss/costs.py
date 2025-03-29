@@ -36,10 +36,6 @@ class GenericCost(geometry.Geometry):
         return jnp.exp(-self.cost_matrix / self.epsilon)
 
     @property
-    def dtype(self) -> jnp.dtype:
-        self._cost_matrix.dtype if self._cost_matrix is not None else jnp.float32
-
-    @property
     def shape(self) -> Tuple[int, int]:
         # in the process of flattening/unflattening in vmap, `__init__`
         # can be called with dummy objects
@@ -58,12 +54,19 @@ class GenericCost(geometry.Geometry):
         """Evaluate cost function at given points."""
         return self.objective_fn(X)
 
-    def tree_flatten(self):  
+    @property
+    def dtype(self) -> jnp.dtype:
+        """The data type."""
+        if self._cost_matrix is not None:
+            return self._cost_matrix.dtype
+        if self._kernel_matrix is not None:
+            return self._kernel_matrix.dtype
+        return jnp.float32
+
+    def tree_flatten(self):  # noqa: D102
         return (
             self.objective_fn,
             self.X,
-            self._src_mask,
-            self._tgt_mask,
             self._epsilon_init,
         ), {
             "scale_cost": self._scale_cost,
@@ -72,12 +75,10 @@ class GenericCost(geometry.Geometry):
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):  
-        objective_fn, X, src_mask, tgt_mask, epsilon = children
+        objective_fn, X, epsilon = children
         return cls(
             objective_fn=objective_fn,
             X=X,
-            src_mask=src_mask,
-            tgt_mask=tgt_mask,
             epsilon=epsilon,
             **aux_data
         )
