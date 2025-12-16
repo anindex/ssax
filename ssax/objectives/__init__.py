@@ -1,1 +1,3 @@
-from ssax.objectives.synthetic import *
+from .synthetic import *
+from .base import *
+from .visualization import *

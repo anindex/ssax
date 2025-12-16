@@ -1,28 +1,35 @@
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, Callable
 
 import jax
-from jax import jit, random, grad, vmap
 import jax.numpy as jnp
+from jax import jit, random, grad, vmap
 from flax import struct
 
 from ott.solvers.linear import sinkhorn, sinkhorn_lr
 from ott.problems.linear import linear_problem
 from ott.geometry.epsilon_scheduler import Epsilon
 
-from ssax.ss.costs import GenericCost
-from ssax.ss.utils import default_prng_key
-from ssax.ss.polytopes import POLYTOPE_MAP, get_sampled_polytope_vertices
-
+from .costs import GenericCost
+from .utils import default_prng_key
+from .polytopes import POLYTOPE_MAP, get_sampled_polytope_vertices
 
 __all__ = ["SinkhornStepState", "SinkhornStep"]
 
 
+# -----------------------------------------------------------------------------
+# Outer Loop (Fixed Point Iteration)
+# -----------------------------------------------------------------------------
+
 def outer_loop(
     cond_fn: Callable[[int, Any, Any], bool],
-    body_fn: Callable[[Any, Any, Any, Any], Any], min_iterations: int,
-    max_iterations: int, inner_iterations: int, constants: Any, state: Any
+    body_fn: Callable[[Any, Any, Any, Any], Any], 
+    min_iterations: int,
+    max_iterations: int, 
+    inner_iterations: int, 
+    constants: Any, 
+    state: Any
 ):
-    """Fixed point iteration with early stopping."""
+    """Fixed point iteration with early stopping and unrolled inner loops."""
     compute_error_flags = jnp.arange(inner_iterations) == inner_iterations - 1
 
     def max_cond_fn(iteration_state):
@@ -35,7 +42,6 @@ def outer_loop(
         )
 
     def unrolled_body_fn(iteration_state):
-
         def one_iteration(iteration_state, compute_error):
             iteration, state = iteration_state
             state = body_fn(iteration, constants, state, compute_error)
@@ -51,62 +57,66 @@ def outer_loop(
     return state
 
 
+# -----------------------------------------------------------------------------
+# Solver State
+# -----------------------------------------------------------------------------
+
 @struct.dataclass
-class SinkhornStepState():
-    """Holds the state of the Wasserstein barycenter solver.
-
-    Args:
-        costs: Holds the sequence of regularized GW costs seen through the outer
-        loop of the solver.
-        linear_convergence: Holds the sequence of bool convergence flags of the
-        inner Sinkhorn iterations.
-        sinkhorn_errors: Holds sequence of vectors of sinkhorn_errors of the Sinkhorn algorithm
-        at each iteration.
-        objective_vals: Holds sequence of objective values at each iteration.
-        displacement_sqnorms: Holds sequence of mean displacement sqnorms at each iteration.
-        cosin_similarity: Holds sequence cosin_similarity compared to true gradients.
-        X: optimizing points.
-        a: weights of the barycenter. (not using)
-    """
-
-    costs: jax.Array = None
-    X: jax.Array = None
-    linear_convergence: Optional[jax.Array] = None
+class SinkhornStepState:
+    """Holds the state of the Sinkhorn Step solver."""
+    costs: jax.Array
+    X: jax.Array
+    linear_convergence: jax.Array
+    displacement_sqnorms: jax.Array
+    a: jax.Array
+    rng: jax.Array
+    
+    # Optional tracking fields
     sinkhorn_errors: Optional[jax.Array] = None
     objective_vals: Optional[jax.Array] = None
-    displacement_sqnorms: Optional[jax.Array] = None
     cosin_similarity: Optional[jax.Array] = None
     X_history: Optional[jax.Array] = None
-    a: Optional[jax.Array] = None
-    rng: Optional[jax.Array] = None
 
     def set(self, **kwargs: Any) -> "SinkhornStepState":
         """Return a copy of self, possibly with overwrites."""
         return self.replace(**kwargs)
 
-
 State = SinkhornStepState
 
 
-@struct.dataclass
-class SinkhornStep():
-    """Batch gradient-free solver for non-convex objectives."""
+# -----------------------------------------------------------------------------
+# Sinkhorn Step Solver
+# -----------------------------------------------------------------------------
 
-    objective_fn: Any = struct.field(default=None, pytree_node=False)
-    dim: int = struct.field(default=2, pytree_node=False)
-    polytope_vertices: jax.Array = struct.field(default=None, pytree_node=False)
-    linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = struct.field(default=None, pytree_node=False)
-    epsilon: Union[Epsilon, float] = struct.field(default=0.1, pytree_node=False)
-    ent_epsilon: Union[Epsilon, float] = struct.field(default=None, pytree_node=False)
-    ent_relative_epsilon: bool = struct.field(default=False, pytree_node=False)
-    scale_cost: float = struct.field(default=1., pytree_node=False)
-    step_radius: float = struct.field(default=1., pytree_node=False)
-    probe_radius: float = struct.field(default=2., pytree_node=False)
-    probes: jax.Array = struct.field(default=None, pytree_node=False)
+@struct.dataclass
+class SinkhornStep:
+    """Batch gradient-free solver for non-convex objectives using Entropic OT."""
+
+    objective_fn: Any = struct.field(pytree_node=False)
+    dim: int = struct.field(pytree_node=False)
+    
+    # Geometry configurations (Arrays must be pytree nodes)
+    polytope_vertices: jax.Array = struct.field(pytree_node=True)
+    probes: jax.Array = struct.field(pytree_node=True)
+    
+    # Solver configurations
+    linear_ot_solver: Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"] = struct.field(pytree_node=True)
+    epsilon: Union[Epsilon, float] = struct.field(default=0.1, pytree_node=True)
+    ent_epsilon: Union[Epsilon, float] = struct.field(default=None, pytree_node=True)
+    ent_relative_epsilon: Optional[bool] = struct.field(default=None, pytree_node=False)
+    
+    # Hyperparameters
+    scale_cost: float = struct.field(default=1.0, pytree_node=False)
+    step_radius: float = struct.field(default=1.0, pytree_node=False)
+    probe_radius: float = struct.field(default=2.0, pytree_node=False)
     rank: int = struct.field(default=-1, pytree_node=False)
+    
+    # Loop controls
     min_iterations: int = struct.field(default=5, pytree_node=False)
     max_iterations: int = struct.field(default=50, pytree_node=False)
     threshold: float = struct.field(default=1e-3, pytree_node=False)
+    
+    # Logging flags
     store_inner_errors: bool = struct.field(default=False, pytree_node=False)
     store_outer_evals: bool = struct.field(default=False, pytree_node=False)
     store_history: bool = struct.field(default=False, pytree_node=False)
@@ -116,14 +126,13 @@ class SinkhornStep():
     def create(
         cls,
         objective_fn: Any,
-        linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn",
-                                         "sinkhorn_lr.LRSinkhorn"]] = None,
+        linear_ot_solver: Optional[Union["sinkhorn.Sinkhorn", "sinkhorn_lr.LRSinkhorn"]] = None,
         epsilon: Optional[Union[Epsilon, float]] = 0.1,
         ent_epsilon: Optional[Union[Epsilon, float]] = None,
         ent_relative_epsilon: Optional[bool] = None,
-        scale_cost: Optional[Union[str, float]] = 1.0,
-        step_radius: float = 1.,
-        probe_radius: float = 2.,
+        scale_cost: Union[str, float] = 1.0,
+        step_radius: float = 1.0,
+        probe_radius: float = 2.0,
         num_probe: int = 5,
         polytope_type: str = 'orthoplex',
         min_iterations: int = 5,
@@ -136,34 +145,32 @@ class SinkhornStep():
         store_cosine_similarity: bool = False,
         **kwargs: Any,
     ) -> "SinkhornStep":
-        is_low_rank = rank > 0
+        
         dim = objective_fn.dim
+        is_low_rank = rank > 0
 
-        # Sinkhorn Step params
-        polytope_vertices = POLYTOPE_MAP[polytope_type](jnp.zeros((dim,)))
+        # Generate template vertices
+        polytope_vertices = POLYTOPE_MAP[polytope_type](jnp.zeros((dim,)), radius=1.0)
+        
+        # Generate probe scales
         probes = jnp.linspace(0, 1, num_probe + 2)[1:num_probe + 1]
+
+        # Initialize OTT Solver
         if linear_ot_solver is None:
             if is_low_rank:
-                if epsilon is None:
-                    # Use default entropic regularization in LRSinkhorn if None was passed
-                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=rank, **kwargs
-                    )
-                else:
-                    # If epsilon is passed, use it to replace the default LRSinkhorn value
-                    linear_ot_solver = sinkhorn_lr.LRSinkhorn(
-                        rank=rank, epsilon=epsilon, **kwargs
-                    )
+                # For Low-Rank, we need a safe default epsilon if none provided
+                solver_eps = epsilon if epsilon is not None else 0.1
+                linear_ot_solver = sinkhorn_lr.LRSinkhorn(
+                    rank=rank, epsilon=solver_eps, **kwargs
+                )
             else:
                 linear_ot_solver = sinkhorn.Sinkhorn(**kwargs)
-        # init uniform weights
-        # TODO: support non-uniform weights for conditional sinkhorn step
-        # self.a = jnp.ones((num_points,)) / num_points
-        # self.b = jnp.ones((self.polytope_vertices.shape[0],)) / self.polytope_vertices.shape[0]
+
         return cls(
             objective_fn=objective_fn,
             dim=dim,
             polytope_vertices=polytope_vertices,
+            probes=probes,
             linear_ot_solver=linear_ot_solver,
             epsilon=epsilon,
             ent_epsilon=ent_epsilon,
@@ -171,7 +178,6 @@ class SinkhornStep():
             scale_cost=scale_cost,
             step_radius=step_radius,
             probe_radius=probe_radius,
-            probes=probes,
             rank=rank,
             min_iterations=min_iterations,
             max_iterations=max_iterations,
@@ -182,121 +188,116 @@ class SinkhornStep():
             store_cosine_similarity=store_cosine_similarity
         )
 
-    @property
-    def is_low_rank(self) -> bool:
-        """Whether the solver is low-rank."""
-        return self.rank > 0
-
     def init_state(
         self,
         X_init: jax.Array,
         rng: Optional[jax.Array] = None,
     ) -> SinkhornStepState:
-        """Initialize the state of the Wasserstein barycenter iterations.
-
-        Args:
-        bar_prob: The barycenter problem.
-        bar_size: Size of the barycenter.
-        X_init: Initial barycenter estimate of shape ``[bar_size, ndim]``.
-            If `None`, ``bar_size`` points will be sampled from the input
-            measures according to their weights
-            :attr:`~ott.problems.linear.barycenter_problem.FreeBarycenterProblem.flattened_y`.
-        rng: Random key for seeding.
-
-        Returns:
-        The initial barycenter state.
-        """
-        num_points, dim = X_init.shape
-
+        """Initialize the solver state."""
+        num_points, _ = X_init.shape
         num_iter = self.max_iterations
-        if self.store_inner_errors:
-            sinkhorn_errors = -jnp.ones((
-                num_iter,
-                self.linear_ot_solver.outer_iterations,
-            ))
-        else:
-            sinkhorn_errors = None
-        if self.store_outer_evals:
-            objective_vals = -jnp.ones((num_iter, num_points))
-        else:
-            objective_vals = None
-        if self.store_history:
-            X_history = jnp.zeros((num_iter, num_points, dim))
-        else:
-            X_history = None
-        if self.store_cosine_similarity:
-            cosin_similarity = -jnp.ones((num_iter, num_points))
-        else:
-            cosin_similarity = None
 
-        # NOTE: uniform weights for now
+        def init_log(shape, enabled):
+            return jnp.full(shape, -1.0) if enabled else None
+
+        sinkhorn_errors = init_log(
+            (num_iter, self.linear_ot_solver.outer_iterations), self.store_inner_errors
+        )
+        objective_vals = init_log((num_iter, num_points), self.store_outer_evals)
+        X_history = init_log((num_iter, num_points, self.dim), self.store_history)
+        if self.store_history:
+             X_history = X_history.at[0].set(X_init)
+        
+        cosin_similarity = init_log((num_iter, num_points), self.store_cosine_similarity)
+
+        # Uniform weights
         a = jnp.ones((num_points,)) / num_points
 
         return SinkhornStepState(
-            costs=-jnp.ones((num_iter,)), X=X_init, linear_convergence=-jnp.ones((num_iter,)),
-            sinkhorn_errors=sinkhorn_errors, objective_vals=objective_vals, 
-            displacement_sqnorms=-jnp.ones((num_iter,)), 
+            costs=jnp.full((num_iter,), -1.0),
+            X=X_init,
+            linear_convergence=jnp.full((num_iter,), -1.0),
+            sinkhorn_errors=sinkhorn_errors,
+            objective_vals=objective_vals,
+            displacement_sqnorms=jnp.full((num_iter,), -1.0),
             cosin_similarity=cosin_similarity,
-            X_history=X_history, a=a,
+            X_history=X_history,
+            a=a,
             rng=default_prng_key(rng)
         )
 
     @jit
     def step(self, state: State, iteration: int) -> State:
-        """Run one iteration of the Sinkhorn algorithm."""
+        """Run one iteration of the Sinkhorn Step algorithm."""
         X = state.X
-
-        eps = self.epsilon.at(iteration) if isinstance(self.epsilon, Epsilon) else self.epsilon
-        step_radius = self.step_radius * eps
-        probe_radius = self.probe_radius * eps
         rng, sub_rng = random.split(state.rng)
 
-        # compute sampled polytope vertices
-        X_vertices, X_probe, vertices = get_sampled_polytope_vertices(X,
-                                                                      polytope_vertices=self.polytope_vertices,
-                                                                      step_radius=step_radius,
-                                                                      probe_radius=probe_radius,
-                                                                      probes=self.probes,
-                                                                      rng=sub_rng)
+        # 1. Resolve Epsilon & Radii
+        current_eps = self.epsilon.at(iteration) if isinstance(self.epsilon, Epsilon) else self.epsilon
+        step_radius = self.step_radius * current_eps
+        probe_radius = self.probe_radius * current_eps
 
-        # solve Sinkhorn
-        cost = GenericCost(self.objective_fn, X_probe, 
-                           epsilon=self.ent_epsilon,
-                           relative_epsilon=self.ent_relative_epsilon,
-                           scale_cost=self.scale_cost,)
-        ot_prob = linear_problem.LinearProblem(cost)
-        res = self.linear_ot_solver(ot_prob)
+        # 2. Sample Polytope & Probes
+        X_vertices, X_probe, _ = get_sampled_polytope_vertices(
+            origin=X,
+            probes=self.probes,
+            polytope_vertices=self.polytope_vertices,
+            step_radius=step_radius,
+            probe_radius=probe_radius,
+            rng=sub_rng
+        )
 
-        # barycentric projection
-        X_new = jnp.einsum('bik,bi->bk', X_vertices, res.matrix / state.a[..., jnp.newaxis])
+        # 3. Define Cost & Solve OT
+        cost_geometry = GenericCost(
+            self.objective_fn, 
+            X_probe, 
+            epsilon=self.ent_epsilon,
+            relative_epsilon=self.ent_relative_epsilon,
+            scale_cost=self.scale_cost
+        )
+        
+        ot_prob = linear_problem.LinearProblem(cost_geometry)
+        ot_out = self.linear_ot_solver(ot_prob)
 
-        updated_costs = state.costs.at[iteration].set(res.ent_reg_cost)
-        linear_convergence = state.linear_convergence.at[iteration].set(res.converged)
+        # 4. Barycentric Projection
+        transport_matrix = ot_out.matrix
+        weights = transport_matrix / state.a[..., None]
+        
+        # X_new[b, d] = sum_k (X_vertices[b, k, d] * weights[b, k])
+        X_new = jnp.einsum('bkd,bk->bd', X_vertices, weights)
 
-        # optimization statistics
-        if state.sinkhorn_errors is not None:
-            sinkhorn_errors = state.sinkhorn_errors.at[iteration, :].set(res.errors)
-        else: 
-            sinkhorn_errors = None
-        if state.objective_vals is not None:
-            objective_vals = state.objective_vals.at[iteration, :].set(self.objective_fn(X_new))
-        else:
-            objective_vals = None
-        if state.X_history is not None:
-            X_history = state.X_history.at[iteration, :, :].set(X_new)
-        else:
-            X_history = None
-        if state.cosin_similarity is not None:
+        # 5. Update Statistics
+        updated_costs = state.costs.at[iteration].set(ot_out.ent_reg_cost)
+        linear_convergence = state.linear_convergence.at[iteration].set(ot_out.converged)
+        displacement_sqnorms = state.displacement_sqnorms.at[iteration].set(
+            jnp.mean(jnp.sum((X_new - X)**2, axis=-1))
+        )
+
+        # Optional Logs
+        sinkhorn_errors = state.sinkhorn_errors
+        if sinkhorn_errors is not None:
+            sinkhorn_errors = sinkhorn_errors.at[iteration, :].set(ot_out.errors)
+
+        objective_vals = state.objective_vals
+        if objective_vals is not None:
+            objective_vals = objective_vals.at[iteration, :].set(self.objective_fn(X_new))
+
+        X_history = state.X_history
+        if X_history is not None:
+            X_history = X_history.at[iteration, :, :].set(X_new)
+
+        cosin_similarity = state.cosin_similarity
+        if cosin_similarity is not None:
             grad_fn = grad(self.objective_fn)
             true_grad = -vmap(grad_fn)(X_new)
-            ss_grad = X_new - X
-            true_grad_norm, ss_grad_norm = jnp.linalg.norm(true_grad, axis=-1), jnp.linalg.norm(ss_grad, axis=-1)
-            cosin = jnp.einsum('bi,bi->b', true_grad, ss_grad) / (true_grad_norm * ss_grad_norm)
-            cosin_similarity = state.cosin_similarity.at[iteration, :].set(cosin)
-        else:
-            cosin_similarity = None
-
-        displacement_sqnorms = state.displacement_sqnorms.at[iteration].set(jnp.sum((X_new - X)**2, axis=-1).mean())
+            ss_step = X_new - X
+            
+            tg_norm = jnp.linalg.norm(true_grad, axis=-1)
+            ss_norm = jnp.linalg.norm(ss_step, axis=-1)
+            
+            safe_denom = jnp.where(tg_norm * ss_norm == 0, 1.0, tg_norm * ss_norm)
+            cosin = jnp.einsum('bi,bi->b', true_grad, ss_step) / safe_denom
+            cosin_similarity = cosin_similarity.at[iteration, :].set(cosin)
 
         return state.set(
             costs=updated_costs,
@@ -310,38 +311,19 @@ class SinkhornStep():
             rng=rng,
         )
 
-    def warm_start(self, X_init: jax.Array, rng: jax.Array = None) -> State:
-        """
-        Warm start the Sinkhorn Step solver by compiling the step function.
-        This returns the initial state of the solver.
-        """
+    def warm_start(self, X_init: jax.Array, rng: Optional[jax.Array] = None) -> State:
+        """Run one step to compile functions and return initial state."""
         init_state = self.init_state(X_init, rng=rng)
         return self.step(init_state, 0)
 
     def iterations(self, init_state: State) -> State:
-        """JITable Sinkhorn Step outer loop.
-
-        Args:
-        X_init: Initial points of shape ``[batch, ndim]``.
-
-        Returns:
-        The final state.
-        """
-        def cond_fn(
-            iteration: int,
-            constants: Tuple[SinkhornStep,
-                             linear_problem.LinearProblem],
-            state: SinkhornStepState
-        ) -> bool:
-            solver, lin_prob = constants
+        """Run the full Sinkhorn Step outer loop."""
+        def cond_fn(iteration, constants, state):
+            solver, _ = constants
             return solver._continue(state, iteration)
 
-        def body_fn(
-            iteration, constants: Tuple[SinkhornStep,
-                                        linear_problem.LinearProblem],
-            state: SinkhornStepState, compute_error: bool
-        ) -> SinkhornStepState:
-            del compute_error  # Always assumed True
+        def body_fn(iteration, constants, state, compute_error):
+            del compute_error
             solver, _ = constants
             return solver.step(state, iteration)
 
@@ -354,23 +336,19 @@ class SinkhornStep():
             constants=(self, None),
             state=init_state
         )
-
-        return self.output_from_state(state)
-
-    def output_from_state(self, state: SinkhornStepState) -> SinkhornStepState:
         return state
 
     def _converged(self, state: State, iteration: int) -> bool:
-        dqsnorm, i, tol = state.displacement_sqnorms, iteration, self.threshold
+        dqsnorm = state.displacement_sqnorms
         return jnp.logical_and(
-            i >= 3, jnp.isclose(dqsnorm[i - 2], dqsnorm[i - 1], rtol=tol)
+            iteration >= 3, 
+            jnp.isclose(dqsnorm[iteration - 2], dqsnorm[iteration - 1], rtol=self.threshold)
         )
 
     def _diverged(self, state: State, iteration: int) -> bool:
         return jnp.logical_not(jnp.isfinite(state.costs[iteration - 1]))
 
     def _continue(self, state: State, iteration: int) -> bool:
-        """Continue while not(converged) and not(diverged)."""
         return jnp.logical_or(
             iteration <= 3,
             jnp.logical_and(

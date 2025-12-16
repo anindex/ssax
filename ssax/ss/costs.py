@@ -1,8 +1,7 @@
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
-
 from ott.geometry import geometry
 
 __all__ = ["GenericCost"]
@@ -10,71 +9,74 @@ __all__ = ["GenericCost"]
 
 @jax.tree_util.register_pytree_node_class
 class GenericCost(geometry.Geometry):
-    """Generic cost function evaluated at polytope vertices for Sinkhorn Step."""
+    """Generic cost function evaluated at polytope vertices for Sinkhorn Step.
+    
+    This geometry computes the cost matrix by evaluating an objective function
+    on the provided vertices and averaging over the probe dimension.
+    
+    It integrates with the OTT library by instantiating a Geometry object
+    defined by the computed [batch, num_vertices] cost matrix.
+    """
 
     def __init__(
         self,
-        objective_fn: Any,
+        objective_fn: Callable[[jax.Array], jax.Array],
         X: jax.Array,
+        epsilon: Optional[Union[float, jax.Array]] = None,
+        relative_epsilon: Optional[bool] = None,
+        scale_cost: Optional[Union[float, str]] = None,
         **kwargs: Any
-        ):
-        super().__init__(**kwargs)
+    ):
+        """
+        Args:
+            objective_fn: A function that takes the vertex array `X` and returns 
+                          costs. Expected output shape is compatible with averaging 
+                          over the last axis (probes).
+            X: The polytope vertices of shape [batch, num_vertices, num_probe, dim].
+            epsilon: Regularization parameter for the Sinkhorn algorithm.
+            relative_epsilon: If True, epsilon is relative to the mean cost.
+            scale_cost: Strategy to scale the cost matrix (e.g. 'mean', 'max_cost').
+            **kwargs: Additional arguments passed to ott.geometry.Geometry.
+        """
+        # Validate Input
+        if X.ndim != 4:
+            raise ValueError(f"Expected X to be 4D [batch, vert, probe, dim], got {X.shape}")
 
         self.objective_fn = objective_fn
-        
-        assert X.ndim == 4  # polytope vertices [batch, num_vertices, num_probe, d]
         self.X = X
 
-    @property
-    def cost_matrix(self) -> Optional[jax.Array]:  
-        if self._cost_matrix is None:
-            self._compute_cost_matrix()
-        return self._cost_matrix * self.inv_scale_cost
+        raw_costs = objective_fn(X)
+        cost_matrix = jnp.mean(raw_costs, axis=-1)
 
-    @property
-    def kernel_matrix(self) -> Optional[jax.Array]:  
-        return jnp.exp(-self.cost_matrix / self.epsilon)
-
-    @property
-    def shape(self) -> Tuple[int, int]:
-        # in the process of flattening/unflattening in vmap, `__init__`
-        # can be called with dummy objects
-        # we optionally access `shape` in order to get the batch size
-        return self.X.shape[:2]
-
-    @property
-    def is_symmetric(self) -> bool:  
-        return self.X.shape[0] == self.X.shape[1]
-
-    def _compute_cost_matrix(self) -> jax.Array:
-        costs = self.objective_fn(self.X)
-        self._cost_matrix = costs.mean(axis=-1)  # [batch, num_vertices]
+        super().__init__(
+            cost_matrix=cost_matrix,
+            epsilon=epsilon,
+            relative_epsilon=relative_epsilon,
+            scale_cost=scale_cost,
+            **kwargs
+        )
 
     def evaluate(self, X: jax.Array) -> jax.Array:
-        """Evaluate cost function at given points."""
+        """Evaluate the objective function at given points (convenience method)."""
         return self.objective_fn(X)
 
-    @property
-    def dtype(self) -> jnp.dtype:
-        """The data type."""
-        if self._cost_matrix is not None:
-            return self._cost_matrix.dtype
-        if self._kernel_matrix is not None:
-            return self._kernel_matrix.dtype
-        return jnp.float32
-
-    def tree_flatten(self):  # noqa: D102
-        return (
+    def tree_flatten(self) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        """Flatten the object for JAX transformations."""
+        children = (
             self.objective_fn,
             self.X,
             self._epsilon_init,
-        ), {
+        )
+        
+        aux_data = {
+            "relative_epsilon": self._relative_epsilon,
             "scale_cost": self._scale_cost,
-            "relative_epsilon": self._relative_epsilon
         }
+        return children, aux_data
 
     @classmethod
-    def tree_unflatten(cls, aux_data, children):  
+    def tree_unflatten(cls, aux_data: Dict[str, Any], children: Tuple[Any, ...]) -> "GenericCost":
+        """Reconstruct the object from flattened data."""
         objective_fn, X, epsilon = children
         return cls(
             objective_fn=objective_fn,

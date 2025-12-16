@@ -1,64 +1,91 @@
+import logging
 import os
+import sys
 import time
+from pathlib import Path
+from typing import Optional
 
 import hydra
-import numpy as np
-from matplotlib import pyplot as plt
-from matplotlib import animation, rc
-rc('animation', html='html5')
-
-from omegaconf import DictConfig, OmegaConf
-from hydra.conf import HydraConf
 import jax
 import jax.numpy as jnp
-from jax import jit
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import animation, rc
+from omegaconf import DictConfig
+from jax import random
 
-from ssax.objectives.visualization import plot_objective
-import ssax.objectives
-from ssax.objectives import ObjectiveFn
-import ssax.ss.initializer
-import ssax.ss.linear_solver
-import ssax.ss.solver
-import ssax.ss.epsilon_scheduler
+# OTT Imports
+from ott.solvers.linear import sinkhorn, sinkhorn_lr
+
+# Internal SSAX Imports
+import ssax.objectives.synthetic as synthetic_objectives
+from ssax.objectives.base import ObjectiveFn
+from ssax.objectives.visualization import plot_contour
+import ssax.ss.initializer as initializers
+import ssax.ss.solver as solvers
+import ssax.ss.epsilon_scheduler as schedulers
+
+# Configure Matplotlib animation
+rc('animation', html='html5')
+
+# Setup logger to print to stdout
+log = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+log.addHandler(handler)
+log.setLevel(logging.INFO)
+
+def setup_linear_solver(cfg: DictConfig):
+    """Factory for the inner OT solver (Sinkhorn or LRSinkhorn)."""
+    solver_name = cfg.experiment.linear_solver.name
+    solver_kwargs = cfg.experiment.linear_solver.kwargs
+    
+    if solver_name == 'Sinkhorn':
+        return sinkhorn.Sinkhorn(**solver_kwargs)
+    elif solver_name == 'LRSinkhorn':
+        return sinkhorn_lr.LRSinkhorn(**solver_kwargs)
+    else:
+        raise ValueError(f"Unknown linear solver: {solver_name}")
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="config")
 def main(cfg: DictConfig):
-    # Set data directory
-    data_dir = cfg.data_dir
-    if data_dir is None:
-        data_dir = os.path.join(ssax.DATA_DIR, cfg.experiment.name)
+    print("="*50)
+    print(f"Starting Experiment: {cfg.experiment.name}")
+    print("="*50)
 
-    # Set log directory
-    logs_dir = cfg.logs_dir
-    if logs_dir is None:
-        logs_dir = os.path.join(ssax.LOGS_DIR, cfg.experiment.name, time.strftime("%Y%m%d-%H%M%S"))
-    os.makedirs(logs_dir, exist_ok=True)
-
+    # 1. Setup Environment
+    cwd = Path.cwd()
+    print(f"Working Directory: {cwd}")
+    
     seed = cfg.experiment.seed
-    rng = jax.random.PRNGKey(seed)
+    rng = random.PRNGKey(seed)
+    rng, init_rng, warm_rng = random.split(rng, 3)
 
-    # Load task objective function
-    task_cls = getattr(ssax.objectives, cfg.experiment.task.name)
+    # 2. Load Task (Objective Function)
+    task_cls = getattr(synthetic_objectives, cfg.experiment.task.name)
     task: ObjectiveFn = task_cls.create(**cfg.experiment.task.kwargs)
+    print(f"Task Loaded: {cfg.experiment.task.name} (Dim: {task.dim})")
 
-    # Sample initializer
-    init_cls = getattr(ssax.ss.initializer, cfg.experiment.initializer.name)
+    # 3. Initialize Particles
+    init_cfg = cfg.experiment.initializer
+    # Inject bounds if available
     if task.bounds is not None:
-        cfg.experiment.initializer.kwargs.bounds = task.bounds.tolist()
-    initializer = init_cls.create(rng=rng, **cfg.experiment.initializer.kwargs)
+        bounds_list = np.array(task.bounds).tolist() 
+        init_cfg.kwargs.bounds = bounds_list
 
-    # Linear solver
-    solver_cls = getattr(ssax.ss.linear_solver, cfg.experiment.linear_solver.name)
-    linear_ot_solver = solver_cls(**cfg.experiment.linear_solver.kwargs)
+    init_cls = getattr(initializers, init_cfg.name)
+    initializer = init_cls.create(rng=init_rng, **init_cfg.kwargs)
+    X_init = initializer(cfg.experiment.num_points)
+    print(f"Initialized {cfg.experiment.num_points} particles using {init_cfg.name}.")
 
-    # Epislon scheduler
-    epsilon_scheduler_cls = getattr(ssax.ss.epsilon_scheduler, cfg.experiment.epsilon_scheduler.name)
-    epsilon_scheduler = epsilon_scheduler_cls(**cfg.experiment.epsilon_scheduler.kwargs)
+    # 4. Setup Solvers & Scheduler
+    linear_ot_solver = setup_linear_solver(cfg)
+    
+    scheduler_cls = getattr(schedulers, cfg.experiment.epsilon_scheduler.name)
+    epsilon_scheduler = scheduler_cls(**cfg.experiment.epsilon_scheduler.kwargs)
 
-    # global optimizer  # TODO: make a base class for global optimizers
-    global_optimizer_cls = getattr(ssax.ss.solver, cfg.experiment.optimizer.name)
-    global_optimizer = global_optimizer_cls.create(
+    optimizer_cls = getattr(solvers, cfg.experiment.optimizer.name)
+    global_optimizer = optimizer_cls.create(
         objective_fn=task,
         linear_ot_solver=linear_ot_solver,
         epsilon=epsilon_scheduler,
@@ -67,80 +94,112 @@ def main(cfg: DictConfig):
         **cfg.experiment.optimizer.kwargs
     )
 
-    X_init = initializer(cfg.experiment.num_points)
-    tic = time.time()
-    init_state = global_optimizer.warm_start(X_init, rng=rng)
-    toc = time.time()
-    print(f"Warm up JIT compile time: {toc - tic:.2f} s")
+    # 5. Warm Start (JIT Compilation)
+    print("\n[1/3] Compiling JAX functions (Warm Start)...")
+    tic = time.perf_counter()  # Changed to perf_counter
+    init_state = global_optimizer.warm_start(X_init, rng=warm_rng)
+    init_state.costs.block_until_ready() 
+    toc = time.perf_counter()
+    print(f"      Compilation finished in {toc - tic:.4f} s")
 
-    tic = time.time()
+    # 6. Main Optimization Loop
+    print("\n[2/3] Running Optimization Loop...")
+    tic = time.perf_counter()
     res = global_optimizer.iterations(init_state)
-    toc = time.time()
+    res.costs.block_until_ready()
+    toc = time.perf_counter()
 
-    # NOTE: this is a hack getting converged iteration index
-    cid = jnp.where(res.linear_convergence == -1)[0]
-    if len(cid) == 0:
-        converged_at = res.linear_convergence.shape[0]
-    else:
-        converged_at = cid.min()
-    print(f"Optimization time converged at {converged_at}! Time: {toc - tic:.2f}s")
+    # Convergence check
+    valid_iters = jnp.sum(res.costs != -1.0)
+    converged_at = int(valid_iters)
+    print(f"      Optimization finished in {toc - tic:.2f}s.")
+    print(f"      Total Iterations: {converged_at}")
 
-    # Plotting
-    if task.bounds is None:
-        bounds = [[-10.0, 10.0], [-10.0, 10.0]]
-    else:
-        bounds = task.bounds
-    fig, ax = plt.subplots()
-    ax.set_xlim(*bounds[0])
-    ax.set_ylim(*bounds[1])
-    ax.set_aspect('equal')
-    ax.axis('off')
-    ax.set_title(f"{cfg.experiment.name}")
-    plot_objective(objective_fn=task, ax=ax)
-    text = ax.text(bounds[0][1], bounds[1][1] + 0.5, f'Iters {0}', style='italic')
-    scatter = ax.scatter(X_init[:, 0], X_init[:, 1], s=3)
-    fig.tight_layout()
+    # 7. Visualization & Saving
+    print("\n[3/3] Generating Outputs...")
+    if cfg.plotting or cfg.save_video:
+        X_history = np.array(res.X_history)  # [iters, N, dim]
+        
+        fig, ax = plt.subplots(figsize=(6, 6))
+        plot_contour(task, ax=ax, title=f"{cfg.experiment.name} (Iter 0)")
+        
+        scatter = ax.scatter(
+            X_init[:, 0], X_init[:, 1], 
+            c='white', s=20, edgecolors='black', alpha=0.9, label='Particles', zorder=5
+        )
+        text = ax.text(0.05, 0.95, f'Iter: 0', transform=ax.transAxes, 
+                       bbox=dict(facecolor='white', alpha=0.8))
+        ax.legend(loc='upper right')
+        fig.tight_layout()
 
-    if cfg.save_video:
-        print("Rendering GIF...")
-        X_hist = res.X_history
-        def plot_particle(iter):
-            """ Plots the objective function in 2D """
-            X = X_hist[iter]
-            scatter.set_offsets(X[:, :2])
-            text.set_text(f'Iters {iter}')
-            return scatter, text
-        anim = animation.FuncAnimation(fig, plot_particle, frames=converged_at, interval=100, blit=True)
-        anim_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.gif")
-        anim.save(anim_name, writer='imagemagick', fps=20)
+        if cfg.save_video:
+            print("      Rendering GIF animation...")
+            def update(frame):
+                idx = min(frame, converged_at - 1)
+                data = X_history[idx]
+                scatter.set_offsets(data[:, :2])
+                text.set_text(f'Iter: {idx}')
+                ax.set_title(f"{cfg.experiment.name} (Iter {idx})")
+                return scatter, text
 
-    if cfg.plotting:
-        X = res.X
-        scatter.set_offsets(X[:, :2])
-        text.set_text(f'Iters {converged_at}')
-        # Save figure
-        fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.png")
-        fig.savefig(fig_name, dpi=300)
+            anim = animation.FuncAnimation(
+                fig, update, frames=range(0, converged_at, 1), 
+                interval=100, blit=False 
+            )
+            
+            anim_path = cwd / f"{cfg.experiment.name}_animation.gif"
+            try:
+                anim.save(str(anim_path), writer='imagemagick', fps=15)
+                print(f"      -> Saved GIF to: {anim_path}")
+            except Exception as e:
+                print(f"      -> Warning: Could not save GIF (is ImageMagick installed?): {e}")
 
-        objective_vals = res.objective_vals
-        mean = objective_vals.mean(axis=-1)
-        std = objective_vals.std(axis=-1)
-        plt.figure()
-        plt.plot(mean)
-        plt.fill_between(np.arange(mean.shape[0]), mean - std, mean + std, alpha=0.3)
-        plt.yscale('log')
-        plt.xlabel('Iterations')
-        plt.ylabel('Objective value')
-        plt.title(f"{cfg.experiment.name}")
-        plt.tight_layout()
-        # Save figure
-        fig_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}_objective_value.png")
-        plt.savefig(fig_name, dpi=300)
+        # B. Save Static Plots
+        if cfg.plotting:
+            # 1. Particles at convergence
+            final_idx = max(0, converged_at - 1)
+            scatter.set_offsets(X_history[final_idx, :, :2])
+            text.set_text(f'Iter: {final_idx}')
+            ax.set_title(f"{cfg.experiment.name} (Final)")
+            
+            fig_path = cwd / f"{cfg.experiment.name}_final.png"
+            fig.savefig(str(fig_path), dpi=300)
+            print(f"      -> Saved final plot to: {fig_path}")
 
-    # Save results
+            # 2. Objective Value Curve
+            plt.figure(figsize=(8, 4))
+            obj_vals = np.array(res.objective_vals[:converged_at]) 
+            mean_obj = np.mean(obj_vals, axis=1)
+            std_obj = np.std(obj_vals, axis=1)
+            iters_arr = np.arange(converged_at)
+            
+            plt.plot(iters_arr, mean_obj, label='Mean Cost')
+            plt.fill_between(iters_arr, mean_obj - std_obj, mean_obj + std_obj, alpha=0.3)
+            plt.yscale('symlog')
+            plt.xlabel('Iterations')
+            plt.ylabel('Objective Value')
+            plt.title(f"{cfg.experiment.name} Convergence")
+            plt.grid(True, linestyle='--', alpha=0.5)
+            
+            curve_path = cwd / f"{cfg.experiment.name}_convergence.png"
+            plt.savefig(str(curve_path), dpi=300)
+            print(f"      -> Saved convergence curve to: {curve_path}")
+
+    # 8. Save Raw Results
     if cfg.save_result:
-        res_name = os.path.join(logs_dir, f"{cfg.experiment.name}_{cfg.experiment.num_points}.npz")
-        np.savez(res_name, **res)
+        save_dict = {}
+        for field in res.__dataclass_fields__:
+            val = getattr(res, field)
+            if isinstance(val, (jax.Array, np.ndarray)):
+                save_dict[field] = np.array(val)
+        
+        npz_path = cwd / f"{cfg.experiment.name}_results.npz"
+        np.savez(str(npz_path), **save_dict)
+        print(f"      -> Saved raw results to: {npz_path}")
+
+    print("\n" + "="*50)
+    print("Done!")
+    print("="*50)
 
 
 if __name__ == "__main__":

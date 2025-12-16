@@ -3,69 +3,116 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from jax import jit, vmap, random
 from functools import partial
-from typing import Any
+from typing import Optional, Tuple
 
-from ssax.ss.utils import default_prng_key
-
-
-@jit
-def rotation_matrix(theta: jax.Array) -> jax.Array:
-    theta = theta[..., jnp.newaxis, jnp.newaxis]
-    dim1 = jnp.concatenate([jnp.cos(theta), -jnp.sin(theta)], axis=-2)
-    dim2 = jnp.concatenate([jnp.sin(theta), jnp.cos(theta)], axis=-2)
-    mat = jnp.concatenate([dim1, dim2], axis=-1)
-    return mat
+from .utils import default_prng_key
 
 
 @jit
-def get_random_maximal_torus_matrix(origin: jax.Array, 
-                                    angle_range=[0, 2 * jnp.pi],
-                                    rng: Any = None,
-                                    **kwargs) -> jax.Array:
-    # NOTE: this does not work for odd dim.
-    # NOTE: this function does not draw a uniform random rotation matrix on SO(dim). But it still works in practice.
-    batch, dim = origin.shape
-    assert dim % 2 == 0, 'Only work with even dim for random rotation for maximal torus rot matrix.'
+def get_rotation_matrix_2d(theta: jax.Array) -> jax.Array:
+    """
+    Creates 2x2 rotation matrices from angles.
+    
+    Args:
+        theta: Angles array of shape [...]
+        
+    Returns:
+        Array of shape [..., 2, 2]
+    """
+    c = jnp.cos(theta)
+    s = jnp.sin(theta)
+    # Stack to create [[cos, -sin], [sin, cos]]
+    # shape: [..., 2, 2]
+    row1 = jnp.stack([c, -s], axis=-1)
+    row2 = jnp.stack([s, c], axis=-1)
+    return jnp.stack([row1, row2], axis=-2)
 
-    theta = random.uniform(default_prng_key(rng), shape=(batch, dim // 2), minval=angle_range[0], maxval=angle_range[1], dtype=origin.dtype)
-    rot_mat = vmap(rotation_matrix)(theta)
-    # make batch block diag
-    max_torus_mat = vmap(lambda mats: jsp.linalg.block_diag(*mats))(rot_mat)
-    return max_torus_mat
 
-
-@partial(jit, static_argnames='dim')
+@partial(jit, static_argnames=['dim'])
 def get_random_uniform_rot_matrix(dim: int,
-                                  rng: Any = None,
+                                  rng: Optional[jax.Array] = None,
                                   **kwargs) -> jax.Array:
-    """Compute a uniformly random rotation matrix drawn from the Haar distribution
-    (the only uniform distribution on SO(n)).
-    See: Stewart, G.W., "The efficient generation of random orthogonal
-    matrices with an application to condition estimators", SIAM Journal
-    on Numerical Analysis, 17(3), pp. 403-409, 1980.
-    For more information see
-    http://en.wikipedia.org/wiki/Orthogonal_matrix#Randomization"""
+    """
+    Generates a uniformly random rotation matrix on SO(dim) using the QR method.
+    
+    Ref: F. Mezzadri, "How to generate random matrices from the classical compact groups"
+    (arXiv:math-ph/0609050).
+    
+    Args:
+        dim: Dimension of the matrix (N).
+        rng: JAX PRNG key.
+        
+    Returns:
+        Rotation matrix of shape [dim, dim] with det(R) = 1.
+    """
+    rng = default_prng_key(rng)
+    
+    # 1. Sample from standard normal distribution
+    Z = random.normal(rng, (dim, dim))
+    
+    # 2. QR Decomposition
+    Q, R = jnp.linalg.qr(Z)
+    
+    # 3. Ensure uniqueness by fixing the sign of the diagonal of R
+    # The diagonal of R must be positive for the decomposition to be unique 
+    # and map to the Haar measure correctly.
+    d = jnp.diagonal(R)
+    phases = jnp.sign(d)
+    
+    # Apply phases to Q
+    Q = Q * phases
+    
+    # 4. Ensure determinant is +1 (Restriction to SO(n))
+    # Currently Q is in O(n), meaning det is +1 or -1.
+    det = jnp.linalg.det(Q)
+    
+    # If det is negative, flip the sign of the first column
+    # (flipping one column changes determinant sign)
+    det_sign = jnp.sign(det)
+    Q = Q.at[:, 0].multiply(det_sign)
+    
+    return Q
 
-    def body_fun(i, vals):
-        rng, H, D = vals
-        rng, subkey = random.split(rng)
-        v = random.normal(subkey, shape=(dim,))
-        D = D.at[i - 1].set(jnp.sign(v[0]))
-        v = v.at[0].add(-D[i - 1] * jnp.sqrt((v * v).sum()))
-        # Householder transformation
-        Hx = jnp.eye(dim) - 2 * jnp.outer(v, v) / (v * v).sum()
-        H = jnp.dot(H, Hx)
-        return rng, H, D
+
+@partial(jit, static_argnames=['angle_range'])
+def get_random_maximal_torus_matrix(origin: jax.Array, 
+                                    angle_range: Tuple[float, float] = (0, 2 * jnp.pi),
+                                    rng: Optional[jax.Array] = None,
+                                    **kwargs) -> jax.Array:
+    """
+    Generates a block-diagonal rotation matrix (maximal torus).
+    Only supports even dimensions.
+    
+    Args:
+        origin: Used only for shape inference [batch, dim].
+        angle_range: Min and max angles for rotation.
+        
+    Returns:
+        Block diagonal matrices [batch, dim, dim]
+    """
+    batch, dim = origin.shape
+    
+    if dim % 2 != 0:
+        raise ValueError(f'Maximal torus rotation requires even dimension, got {dim}.')
 
     rng = default_prng_key(rng)
-    H = jnp.eye(dim)
-    D = jnp.ones((dim,))
-    _, H, D = jax.lax.fori_loop(1, dim, body_fun, (rng, H, D))
-    # Fix the last sign such that the determinant is 1
-    D = D.at[-1].set((-1)**(1 - dim % 2) * jnp.prod(D))
-    R = (D * H.T).T
-    return R
+    
+    # 1. Sample angles: [batch, dim // 2]
+    # One angle per 2x2 block
+    n_blocks = dim // 2
+    theta = random.uniform(rng, shape=(batch, n_blocks), 
+                           minval=angle_range[0], maxval=angle_range[1], 
+                           dtype=origin.dtype)
+    
+    # 2. Convert angles to 2x2 matrices: [batch, n_blocks, 2, 2]
+    blocks = get_rotation_matrix_2d(theta)
+    
+    # 3. Form block diagonal matrix [batch, dim, dim]
+    
+    def _assemble_blocks(block_list):
+        # block_list is [n_blocks, 2, 2]
+        return jsp.linalg.block_diag(*block_list)
 
-
-if __name__ == '__main__':
-    print(jnp.linalg.det(get_random_uniform_rot_matrix(10)))
+    max_torus_mat = vmap(_assemble_blocks)(blocks)
+    
+    return max_torus_mat

@@ -1,87 +1,137 @@
-# Sinkhorn Step in JAX (ssax)
+# Sinkhorn Step in JAX (`ssax`)
 
-This `ssax` repository demonstrates the proof of concept for the Sinkhorn Step - a batch gradient-free optimizer for highly non-convex objectives in JAX. `ssax` is heavily inspired by the code structure of [OTT-JAX](https://github.com/ott-jax/ott) to utilize most of its linear solvers, enabling the users to easily switch between different solver flavors.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![JAX](https://img.shields.io/badge/JAX-Accelerated-9cf)](https://github.com/google/jax)
+[![NeurIPS 2023](https://img.shields.io/badge/NeurIPS-2023-a55.svg)](https://proceedings.neurips.cc/paper_files/paper/2023/file/f7a94134f1c726796c6f81fb946e489d-Paper-Conference.pdf)
 
-<p float="middle">
-  <img src="demos/ss-al_100000.gif" width="32%" />
-  <img src="demos/ss-bk_100000.gif" width="32%" /> 
-  <img src="demos/ss-rb_100000.gif" width="32%" />
+**`ssax`** is a high-performance JAX implementation of the **Sinkhorn Step**—a batch gradient-free optimizer for highly non-convex objectives.
+
+It leverages the power of [OTT-JAX](https://github.com/ott-jax/ott) for robust and differentiable optimal transport solvers, enabling efficient exploration of complex landscapes.
+
+<p align="center">
+  <img src="demos/ss-al_100000.gif" width="30%" alt="Ackley"/>
+  <img src="demos/ss-bk_100000.gif" width="30%" alt="Bukin"/> 
+  <img src="demos/ss-rb_100000.gif" width="30%" alt="Rosenbrock"/>
+</p>
+<p align="center">
+  <img src="demos/ss-eh_100000.gif" width="30%" alt="EggHolder"/>
+  <img src="demos/ss-ht_100000.gif" width="30%" alt="Holder"/> 
+  <img src="demos/ss-lv_100000.gif" width="30%" alt="Levy"/>
 </p>
 
-<p float="middle">
-  <img src="demos/ss-eh_100000.gif" width="32%" />
-  <img src="demos/ss-ht_100000.gif" width="32%" /> 
-  <img src="demos/ss-lv_100000.gif" width="32%" />
-</p>
+> **Note:** This repository provides the **JAX** implementation of the Sinkhorn Step as a standalone optimizer. For the MPOT trajectory optimizer (PyTorch version), please visit [mpot](https://github.com/anindex/mpot).
 
-**NOTE**: This repository implements the Sinkhorn Step optimizer (in JAX) as a general-purpose standalone solver for non-convex optimization problems. The MPOT trajectory optimizer using Sinkhorn Step (in PyTorch) is released in this repository [mpot](https://github.com/anindex/mpot).
+## Paper
 
-## Paper Preprint
-
-This work has been accepted to NeurIPS 2023. Please find the pre-print here:
-
-[<img src="https://img.shields.io/badge/arxiv-%23B31B1B.svg?&style=for-the-badge&logo=arxiv&logoColor=white" />](https://www.ias.informatik.tu-darmstadt.de/uploads/Team/AnThaiLe/mpot_preprint.pdf)
+This work was accepted to **NeurIPS 2023**.
+[**Accelerating Motion Planning via Optimal Transport**](https://proceedings.neurips.cc/paper_files/paper/2023/file/f7a94134f1c726796c6f81fb946e489d-Paper-Conference.pdf)
 
 ## Installation
 
-Simply activate your conda/Python environment and run
+1. **Clone the repository:**
+  ```bash
+   git clone [https://github.com/anindex/ssax.git](https://github.com/anindex/ssax.git)
+   cd ssax
+  ```
 
-```azure
-pip install -e .
+2.  **Install dependencies:**
+    It is recommended to use a fresh conda environment.
+
+    ```bash
+    pip install -e .
+    ```
+
+    **GPU Support:** To run on GPU, you must install the CUDA-enabled version of JAX manually:
+
+    ```bash
+    pip install -U "jax[cuda13]"
+    ```
+
+    (Check the [JAX Installation Guide](https://github.com/google/jax#installation) for your specific CUDA version)
+
+## Usage
+
+### 1\. Quick Example
+
+Run a simple optimization on the Ackley function:
+
+```bash
+# Run with default settings (Ackley 2D)
+python scripts/example.py --objective Ackley --num_points 1000
+
+# Try a different function
+python scripts/example.py --objective Rosenbrock --num_points 5000 --max_iters 50
 ```
 
-Please install [JAX with CUDA support](https://github.com/google/jax#installation) if you want to run the code on GPU for more performance.
+### 2\. Visualize Objective Functions
 
-## Run some demos
+Explore the landscape of the available synthetic test functions:
 
-An example script is provided in `scripts/example.py`.
+```bash
+# View a gallery of all functions
+python scripts/visualize_objectives.py
 
-For testing Sinkhorn Step with various synthetic functions, run the following script with `hydra` settings:
+# Inspect a specific function in 3D
+python scripts/visualize_objectives.py --name Rastrigin
+```
 
-```azure
+### 3\. Run Experiments (Hydra)
+
+Use `hydra` to run configured experiments. Results (plots/animations) are saved in the `logs/` directory.
+
+```bash
 python scripts/run.py experiment=ss-al
 ```
 
-and find result animations in the `logs/` folder. You can replace the tag `experiment=<exp-filename>` with filenames found in `configs/experiment` folder. The current available optimization experiments are:
+**Available Experiments:**
+| Config Name | Function | Dim |
+|:---|:---|:---:|
+| `ss-al` | Ackley | 2D |
+| `ss-al-10d` | Ackley | 10D |
+| `ss-bk` | Bukin | 2D |
+| `ss-eh` | EggHolder | 2D |
+| `ss-rb` | Rosenbrock | 2D |
+| `ss-st` | Styblinski-Tang | 2D |
 
-- `ss-al`: Ackley function in 2D
-- `ss-al-10d`: Ackley function in 10D
-- `ss-bk`: Bukin function in 2D
-- `ss-dw`: DropWave function in 2D
-- `ss-eh`: EggHolder function in 2D
-- `ss-ht`: Hoelder Table function in 2D
-- `ss-lv`: Levy function in 2D
-- `ss-rb`: Rosenbrock function in 2D
-- `ss-rg`: Rastrigin function in 2D
-- `ss-st`: Styblinski-Tang function in 2D
-- `ss-st-10d`: Styblinski-Tang function in 10D
+> **Hyperparameter Tuning:** The critical parameters are `step_radius`, `probe_radius`, and `ent_epsilon`. You can override them from the command line:
+>
+> ```bash
+> python scripts/run.py experiment=ss-al optimizer.kwargs.step_radius=0.2
+> ```
 
-**Note**: For tuning new settings, the most sensitive hyperparameters are `step_radius`, `probe_radius`, entropic regularization scalar `ent_epsilon` and the step-annealing scheme `epsilon_scheduler` parameters. You can play around with these parameters together with the other hyperparameters with synthetic functions to get a feeling of how they affect the optimization. For the 10D experiments, the plots are projected to the first 2 dimensions for visualization.
+## Benchmarking
 
-We also add some benchmarks on gradient approximation experiments based on cosine similarity between the Sinkhorn Step and the true gradient, over outer iterations and over entropic regularization on the Sinkhorn distance. We turn off step annealing for benchmarking purpose. The current available gradient approximation experiments are:
+We evaluate the quality of the Sinkhorn Step direction compared to the true gradient (cosine similarity).
 
-- `ss-al-cosin-sim`: Ackley function in 10D
-- `ss-st-cosin-sim`: Styblinski-Tang function in 10D
+**Run single-seed analysis (Violin/Box plots):**
 
-To run them:
-```azure
+```bash
 python scripts/benchmark_cosin_similarity_single.py experiment=ss-st-cosin-sim num_seeds=20
+```
+
+**Run multi-epsilon sweep (Line plots):**
+
+```bash
+python scripts/benchmark_cosin_similarity.py experiment=ss-st-cosin-sim num_seeds=5
 ```
 
 ## Citation
 
 If you found this work useful, please consider citing this reference:
 
-```
-@inproceedings{le2023accelerating,
-  title={Accelerating Motion Planning via Optimal Transport},
-  author={Le, An T. and Chalvatzaki, Georgia and Biess, Armin and Peters, Jan},
-  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+```bibtex
+@article{le2023accelerating,
+  title={Accelerating motion planning via optimal transport},
+  author={Le, An T and Chalvatzaki, Georgia and Biess, Armin and Peters, Jan R},
+  journal={Advances in Neural Information Processing Systems},
+  volume={36},
+  pages={78453--78482},
   year={2023}
 }
 ```
 
-## See also
+## Acknowledgments
 
-- The [OTT-JAX documentation](https://ott-jax.readthedocs.io/en/latest/) for more details on the linear solvers.
-- [This wonderful library](http://www.sfu.ca/~ssurjano/optimization.html) of synthetic test functions from Sonja & Derek (SFU). 
+  - [OTT-JAX](https://github.com/ott-jax/ott): The backbone for our differentiable linear solvers.
+  - [SFU Optimization Library](http://www.sfu.ca/~ssurjano/optimization.html): Source for synthetic test function definitions.
