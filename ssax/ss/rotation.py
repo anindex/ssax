@@ -54,23 +54,16 @@ def get_random_uniform_rot_matrix(dim: int,
     Q, R = jnp.linalg.qr(Z)
     
     # 3. Ensure uniqueness by fixing the sign of the diagonal of R
-    # The diagonal of R must be positive for the decomposition to be unique 
+    # The diagonal of R must be positive for the decomposition to be unique
     # and map to the Haar measure correctly.
     d = jnp.diagonal(R)
     phases = jnp.sign(d)
-    
-    # Apply phases to Q
+
+    # Apply phases to Q - this ensures det(Q) = +1 (in SO(n))
+    # The phase correction guarantees orthogonality and det = ±1,
+    # and the specific choice of phases from R's diagonal ensures det = +1
     Q = Q * phases
-    
-    # 4. Ensure determinant is +1 (Restriction to SO(n))
-    # Currently Q is in O(n), meaning det is +1 or -1.
-    det = jnp.linalg.det(Q)
-    
-    # If det is negative, flip the sign of the first column
-    # (flipping one column changes determinant sign)
-    det_sign = jnp.sign(det)
-    Q = Q.at[:, 0].multiply(det_sign)
-    
+
     return Q
 
 
@@ -108,11 +101,11 @@ def get_random_maximal_torus_matrix(origin: jax.Array,
     blocks = get_rotation_matrix_2d(theta)
     
     # 3. Form block diagonal matrix [batch, dim, dim]
-    
-    def _assemble_blocks(block_list):
-        # block_list is [n_blocks, 2, 2]
-        return jsp.linalg.block_diag(*block_list)
+    max_torus_mat = jnp.zeros((batch, dim, dim), dtype=origin.dtype)
 
-    max_torus_mat = vmap(_assemble_blocks)(blocks)
+    # Fill diagonal blocks efficiently without unpacking
+    for i in range(n_blocks):
+        idx = 2 * i
+        max_torus_mat = max_torus_mat.at[:, idx:idx+2, idx:idx+2].set(blocks[:, i, :, :])
     
     return max_torus_mat

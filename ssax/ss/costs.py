@@ -29,8 +29,8 @@ class GenericCost(geometry.Geometry):
     ):
         """
         Args:
-            objective_fn: A function that takes the vertex array `X` and returns 
-                          costs. Expected output shape is compatible with averaging 
+            objective_fn: A function that takes the vertex array `X` and returns
+                          costs. Expected output shape is compatible with averaging
                           over the last axis (probes).
             X: The polytope vertices of shape [batch, num_vertices, num_probe, dim].
             epsilon: Regularization parameter for the Sinkhorn algorithm.
@@ -43,9 +43,13 @@ class GenericCost(geometry.Geometry):
             raise ValueError(f"Expected X to be 4D [batch, vert, probe, dim], got {X.shape}")
 
         self.objective_fn = objective_fn
-        self.X = X
+        self._x_shape = X.shape
 
-        raw_costs = objective_fn(X)
+        # Vectorize evaluation by flattening to [batch*vert*probe, dim]
+        batch, num_verts, num_probe, dim = X.shape
+        flat_X = X.reshape(-1, dim)
+        raw_costs_flat = objective_fn(flat_X)
+        raw_costs = raw_costs_flat.reshape(batch, num_verts, num_probe)
         cost_matrix = jnp.mean(raw_costs, axis=-1)
 
         super().__init__(
@@ -64,23 +68,27 @@ class GenericCost(geometry.Geometry):
         """Flatten the object for JAX transformations."""
         children = (
             self.objective_fn,
-            self.X,
             self._epsilon_init,
         )
-        
+
         aux_data = {
             "relative_epsilon": self._relative_epsilon,
             "scale_cost": self._scale_cost,
+            "x_shape": self._x_shape,
         }
         return children, aux_data
 
     @classmethod
     def tree_unflatten(cls, aux_data: Dict[str, Any], children: Tuple[Any, ...]) -> "GenericCost":
         """Reconstruct the object from flattened data."""
-        objective_fn, X, epsilon = children
-        return cls(
+        objective_fn, epsilon = children
+        x_shape = aux_data.pop("x_shape")
+
+        dummy_X = jnp.zeros(x_shape)
+        instance = cls(
             objective_fn=objective_fn,
-            X=X,
+            X=dummy_X,
             epsilon=epsilon,
             **aux_data
         )
+        return instance

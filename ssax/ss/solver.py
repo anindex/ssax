@@ -1,4 +1,5 @@
 from typing import Any, Dict, Optional, Sequence, Tuple, Union, Callable
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -70,7 +71,12 @@ class SinkhornStepState:
     displacement_sqnorms: jax.Array
     a: jax.Array
     rng: jax.Array
-    
+    iteration_count: int = 0
+
+    # Dual potentials for warm-starting OT solver
+    f: Optional[jax.Array] = None
+    g: Optional[jax.Array] = None
+
     # Optional tracking fields
     sinkhorn_errors: Optional[jax.Array] = None
     objective_vals: Optional[jax.Array] = None
@@ -226,7 +232,7 @@ class SinkhornStep:
             rng=default_prng_key(rng)
         )
 
-    @jit
+    @partial(jit, static_argnames=['iteration'])
     def step(self, state: State, iteration: int) -> State:
         """Run one iteration of the Sinkhorn Step algorithm."""
         X = state.X
@@ -249,20 +255,27 @@ class SinkhornStep:
 
         # 3. Define Cost & Solve OT
         cost_geometry = GenericCost(
-            self.objective_fn, 
-            X_probe, 
+            self.objective_fn,
+            X_probe,
             epsilon=self.ent_epsilon,
             relative_epsilon=self.ent_relative_epsilon,
             scale_cost=self.scale_cost
         )
-        
-        ot_prob = linear_problem.LinearProblem(cost_geometry)
-        ot_out = self.linear_ot_solver(ot_prob)
 
-        # 4. Barycentric Projection
+        ot_prob = linear_problem.LinearProblem(cost_geometry)
+
+        # Warm-start from previous dual potentials if available
+        init_potentials = None if state.f is None else (state.f, state.g)
+        ot_out = self.linear_ot_solver(ot_prob, init=init_potentials)
+
+        # 4. Extract dual potentials for next iteration warm-start
+        new_f = ot_out.f
+        new_g = ot_out.g
+
+        # 5. Barycentric Projection
         transport_matrix = ot_out.matrix
         weights = transport_matrix / state.a[..., None]
-        
+
         # X_new[b, d] = sum_k (X_vertices[b, k, d] * weights[b, k])
         X_new = jnp.einsum('bkd,bk->bd', X_vertices, weights)
 
@@ -309,6 +322,46 @@ class SinkhornStep:
             X=X_new,
             X_history=X_history,
             rng=rng,
+            iteration_count=iteration + 1,
+            f=new_f,
+            g=new_g
+        )
+
+    def trim_state(self, state: State) -> State:
+        """Trim tracking arrays to actual iteration count to save memory."""
+        actual_iters = state.iteration_count
+
+        if actual_iters == 0 or actual_iters >= self.max_iterations:
+            return state
+
+        trimmed_costs = state.costs[:actual_iters]
+        trimmed_convergence = state.linear_convergence[:actual_iters]
+        trimmed_displacement = state.displacement_sqnorms[:actual_iters]
+
+        trimmed_sinkhorn = None
+        if state.sinkhorn_errors is not None:
+            trimmed_sinkhorn = state.sinkhorn_errors[:actual_iters]
+
+        trimmed_obj = None
+        if state.objective_vals is not None:
+            trimmed_obj = state.objective_vals[:actual_iters]
+
+        trimmed_cosin = None
+        if state.cosin_similarity is not None:
+            trimmed_cosin = state.cosin_similarity[:actual_iters]
+
+        trimmed_history = None
+        if state.X_history is not None:
+            trimmed_history = state.X_history[:actual_iters]
+
+        return state.set(
+            costs=trimmed_costs,
+            linear_convergence=trimmed_convergence,
+            displacement_sqnorms=trimmed_displacement,
+            sinkhorn_errors=trimmed_sinkhorn,
+            objective_vals=trimmed_obj,
+            cosin_similarity=trimmed_cosin,
+            X_history=trimmed_history
         )
 
     def warm_start(self, X_init: jax.Array, rng: Optional[jax.Array] = None) -> State:
@@ -336,7 +389,7 @@ class SinkhornStep:
             constants=(self, None),
             state=init_state
         )
-        return state
+        return self.trim_state(state)
 
     def _converged(self, state: State, iteration: int) -> bool:
         dqsnorm = state.displacement_sqnorms

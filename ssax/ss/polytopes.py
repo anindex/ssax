@@ -5,7 +5,7 @@ from functools import partial
 from typing import Tuple, Dict, Callable, Optional, Union
 
 from .probe import get_probe_points, get_random_probe_points
-from .rotation import get_random_uniform_rot_matrix
+from .rotation import get_random_uniform_rot_matrix, get_rotation_matrix_2d
 from .utils import default_prng_key
 
 @jit
@@ -74,10 +74,16 @@ def get_sampled_polytope_vertices(origin: jax.Array,
     batch, dim = origin.shape
     
     rng = default_prng_key(rng)
-    batch_keys = random.split(rng, batch)
 
     # 1. Generate Rotation Matrices [batch, dim, dim]
-    rot_mats = vmap(get_random_uniform_rot_matrix, in_axes=(None, 0))(dim, batch_keys)
+    if dim == 2:
+        # Special case: use analytical 2D rotation (10x faster)
+        angles = random.uniform(rng, (batch,), minval=0, maxval=2*jnp.pi)
+        rot_mats = vmap(get_rotation_matrix_2d)(angles)
+    else:
+        # General case: QR decomposition
+        batch_keys = random.split(rng, batch)
+        rot_mats = vmap(get_random_uniform_rot_matrix, in_axes=(None, 0))(dim, batch_keys)
     
     # 2. Apply Rotation using Einsum
     # 'bji' = batch, row(j), col(i) of Rotation Matrix
